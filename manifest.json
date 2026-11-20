@@ -1,0 +1,10 @@
+{
+  "id": "ecu-terminal",
+  "name": "ecu-terminal",
+  "version": "2.0.0",
+  "minAppVersion": "1.7.2",
+  "description": "Bağımsız terminal (xterm.js + node-pty): Cmd+J ile notun yanında göster/gizle, bölme, komut çıktısını nota ekleme.",
+  "author": "Eren Can Ucar",
+  "isDesktopOnly": true,
+  "authorUrl": "https://github.com/erencanucarr"
+}
