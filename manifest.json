@@ -3,7 +3,7 @@
   "name": "ecu-terminal",
   "version": "2.1.0",
   "minAppVersion": "1.7.2",
-  "description": "Bağımsız terminal (xterm.js + node-pty): Cmd+J ile notun yanında göster/gizle, bölme, komut çıktısını nota ekleme.",
+  "description": "A terminal inside Obsidian, with split panes and command output to notes.",
   "author": "Eren Can Ucar",
   "isDesktopOnly": true,
   "authorUrl": "https://github.com/erencanucarr"
