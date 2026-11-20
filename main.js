@@ -1,9 +1,38 @@
-const { Plugin, ItemView, Modal, PluginSettingTab, Setting, MarkdownView, Notice, Menu, FileSystemAdapter, setIcon } = require("obsidian");
+const { Plugin, ItemView, Modal, PluginSettingTab, Setting, MarkdownView, Notice, Menu, FileSystemAdapter, Scope, setIcon } = require("obsidian");
 
 const nodeRequire = window.require;
 const path = nodeRequire("path");
 const fs = nodeRequire("fs");
 const os = nodeRequire("os");
+
+const IS_MAC = process.platform === "darwin";
+const IS_WIN = process.platform === "win32";
+const KEY = IS_MAC
+  ? { toggle: "⌘J", move: "⌘⇧J", split: "⌘D", search: "⌘F", clear: "⌘K", copy: "⌘C", paste: "⌘V", nav: "⌥⌘+ok", palette: "⌘P" }
+  : { toggle: "Ctrl+J", move: "Ctrl+Shift+J", split: "Ctrl+Shift+D", search: "Ctrl+Shift+F", clear: "Ctrl+Shift+K", copy: "Ctrl+Shift+C", paste: IS_WIN ? "Ctrl+V" : "Ctrl+Shift+V", nav: "Alt+ok", palette: "Ctrl+Shift+P" };
+
+function defaultShell() {
+  if (IS_WIN) {
+    const sys = process.env.SystemRoot || "C:\\Windows";
+    const cands = [
+      process.env.ProgramFiles && path.join(process.env.ProgramFiles, "PowerShell", "7", "pwsh.exe"),
+      path.join(sys, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    ];
+    for (const c of cands) {
+      try {
+        if (c && fs.existsSync(c)) return c;
+      } catch (e) {}
+    }
+    return process.env.COMSPEC || "cmd.exe";
+  }
+  return process.env.SHELL || (IS_MAC ? "/bin/zsh" : "/bin/bash");
+}
+
+function shellKind(shell) {
+  const n = String(shell).split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, "");
+  if (n === "zsh" || n === "bash" || n === "pwsh" || n === "powershell" || n === "cmd") return n;
+  return "other";
+}
 
 const VIEW = "ecu-terminal-view";
 const LEGACY_VIEW = "terminal-view";
@@ -33,7 +62,7 @@ const DEFAULTS = {
   notifySound: true,
 };
 
-const PROMPT_RE = /^(?:\([^)\n]{1,40}\)\s*)?(?:\[[^\]\n]{1,80}\]\s?[$#%]|[\w.-]+@[\w.-]+[^\n$#%]{0,80}?[$#%]|\S{0,40}\s?[❯➜])\s/;
+const PROMPT_RE = /^(?:\([^)\n]{1,40}\)\s*)?(?:\[[^\]\n]{1,80}\]\s?[$#%]|[\w.-]+@[\w.-]+[^\n$#%]{0,80}?[$#%]|\S{0,40}\s?[❯➜]|(?:PS )?[A-Za-z]:\\[^>\n]{0,160}>)\s/;
 
 function bufferLines(term) {
   const b = term.buffer.active;
@@ -142,6 +171,100 @@ function loadEngine(dir) {
     css: fs.readFileSync(v("xterm/xterm.css"), "utf8"),
   };
   return ENGINE;
+}
+
+const BASH_INIT = (login) =>
+  [
+    "# ecu-terminal: bash shell entegrasyonu",
+    login
+      ? '[ -f /etc/profile ] && . /etc/profile; for __f in ~/.bash_profile ~/.bash_login ~/.profile; do if [ -f "$__f" ]; then . "$__f"; break; fi; done; unset __f'
+      : '[ -f ~/.bashrc ] && . ~/.bashrc',
+    'if [ -z "$__ECU_SHELL_INTEGRATION" ]; then',
+    "__ECU_SHELL_INTEGRATION=1",
+    "__ecu_ready=",
+    "__ecu_pc_start() { __ecu_ec=$?; __ecu_ready=; }",
+    "__ecu_pc_end() {",
+    "  printf '\\e]133;D;%s\\e\\\\' \"$__ecu_ec\"",
+    "  printf '\\e]7;file://%s%s\\e\\\\' \"${HOSTNAME}\" \"${PWD}\"",
+    "  printf '\\e]133;A\\e\\\\'",
+    "  __ecu_ready=1",
+    "  return $__ecu_ec",
+    "}",
+    "__ecu_preexec() {",
+    '  [ -n "$__ecu_ready" ] || return 0',
+    '  [ -n "$COMP_LINE" ] && return 0',
+    '  case "$BASH_COMMAND" in __ecu_pc_*) return 0;; esac',
+    "  __ecu_ready=",
+    "  local c; c=$(HISTTIMEFORMAT= builtin history 1)",
+    "  c=\"${c#*[0-9] }\"; c=\"${c#\"${c%%[![:space:]]*}\"}\"",
+    "  printf '\\e]133;E;%s\\e\\\\' \"${c//[[:cntrl:]]/ }\"",
+    "  printf '\\e]133;B\\e\\\\'",
+    "}",
+    'if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then',
+    '  PROMPT_COMMAND=(__ecu_pc_start "${PROMPT_COMMAND[@]}" __ecu_pc_end)',
+    "else",
+    '  PROMPT_COMMAND="__ecu_pc_start${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __ecu_pc_end"',
+    "fi",
+    'if [ -z "$(trap -p DEBUG)" ]; then trap \'__ecu_preexec\' DEBUG; fi',
+    "fi",
+    "",
+  ].join("\n");
+
+const PWSH_INIT = [
+  "if ($null -eq $global:__ecuInit) {",
+  "  $global:__ecuInit = $true",
+  "  $global:__ecuOrigPrompt = $function:prompt",
+  "  function global:prompt {",
+  "    $ok = $?; $ec = $global:LASTEXITCODE",
+  "    $e = [char]27",
+  "    $code = if ($ok) { 0 } elseif ($ec -is [int] -and $ec -ne 0) { $ec } else { 1 }",
+  "    $dir = ($PWD.ProviderPath -replace '\\\\', '/')",
+  '    "$e]133;D;$code$e\\$e]7;file://$env:COMPUTERNAME/$dir$e\\$e]133;A$e\\" + (& $global:__ecuOrigPrompt)',
+  "  }",
+  "  if (Get-Module PSReadLine) {",
+  "    $global:__ecuPrevHist = (Get-PSReadLineOption).AddToHistoryHandler",
+  "    Set-PSReadLineOption -AddToHistoryHandler {",
+  "      param($line)",
+  "      $e = [char]27",
+  "      $c = $line -replace '[\\x00-\\x1f]', ' '",
+  '      [Console]::Write("$e]133;E;$c$e\\$e]133;B$e\\")',
+  "      if ($global:__ecuPrevHist) { & $global:__ecuPrevHist $line } else { $true }",
+  "    }",
+  "  }",
+  "}",
+].join("\n");
+
+function writeBashIntegration(dir) {
+  const bdir = path.join(dir, "shell");
+  fs.mkdirSync(bdir, { recursive: true });
+  const p = path.join(bdir, "ecu-init.bash");
+  const body = BASH_INIT(IS_MAC);
+  if (!fs.existsSync(p) || fs.readFileSync(p, "utf8") !== body) fs.writeFileSync(p, body);
+  return p;
+}
+
+function shellLaunch(plugin, shell, env) {
+  const kind = shellKind(shell);
+  if (kind === "zsh") {
+    try {
+      const zdir = writeShellIntegration(plugin.pluginDir());
+      if (process.env.ZDOTDIR) env.__ECU_USER_ZDOTDIR = process.env.ZDOTDIR;
+      env.ZDOTDIR = zdir;
+    } catch (e) {}
+    return ["-l"];
+  }
+  if (kind === "bash") {
+    try {
+      return ["--init-file", writeBashIntegration(plugin.pluginDir()), "-i"];
+    } catch (e) {
+      return IS_MAC ? ["-l"] : ["-i"];
+    }
+  }
+  if (kind === "pwsh" || kind === "powershell") {
+    return ["-NoLogo", "-NoExit", "-EncodedCommand", nodeRequire("buffer").Buffer.from(PWSH_INIT, "utf16le").toString("base64")];
+  }
+  if (kind === "cmd" || IS_WIN) return [];
+  return ["-l"];
 }
 
 function writeShellIntegration(dir) {
@@ -339,8 +462,8 @@ class TermSession {
     this.installHandlers();
     this.fitNow();
 
-    const shell = s.shellPath || process.env.SHELL || "/bin/zsh";
-    this.shellName = path.basename(shell);
+    const shell = s.shellPath || defaultShell();
+    this.shellName = String(shell).split(/[\\/]/).pop().replace(/\.exe$/i, "").toLowerCase();
     const env = Object.assign({}, process.env, {
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
@@ -349,18 +472,11 @@ class TermSession {
     });
     delete env.ELECTRON_RUN_AS_NODE;
     delete env.ELECTRON_NO_ATTACH_CONSOLE;
-    if (this.shellName === "zsh") {
-      try {
-        const zdir = writeShellIntegration(this.plugin.pluginDir());
-        if (process.env.ZDOTDIR) env.__ECU_USER_ZDOTDIR = process.env.ZDOTDIR;
-        env.ZDOTDIR = zdir;
-      } catch (e) {
-      }
-    }
+    const args = shellLaunch(this.plugin, shell, env);
     this.cwd = this.startDir();
     let p;
     try {
-      p = E.pty.spawn(shell, ["-l"], { name: "xterm-256color", cols: term.cols, rows: term.rows, cwd: this.cwd, env });
+      p = E.pty.spawn(shell, args, { name: "xterm-256color", cols: term.cols, rows: term.rows, cwd: this.cwd, env });
     } catch (e) {
       term.write(`\r\n\x1b[31mShell başlatılamadı (${shell}): ${e && e.message ? e.message : e}\x1b[0m\r\n`);
       return;
@@ -451,6 +567,7 @@ class TermSession {
         } catch (e) {
           this.cwd = m[1];
         }
+        if (/^\/[A-Za-z]:/.test(this.cwd)) this.cwd = this.cwd.slice(1);
         this.updateCaption();
       }
       return true;
@@ -463,11 +580,12 @@ class TermSession {
         e.stopPropagation();
         return true;
       }
-      if (e.metaKey && e.altKey && /^Arrow/.test(e.key)) {
+      if (IS_MAC ? e.metaKey && e.altKey && /^Arrow/.test(e.key) : e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && /^Arrow/.test(e.key)) {
         e.preventDefault();
         this.view.focusNeighbor(e.key.slice(5).toLowerCase(), this);
         return false;
       }
+      if (!IS_MAC) return this.ctrlKeys(e);
       if (e.metaKey && !e.ctrlKey && !e.altKey) {
         const k = e.key.toLowerCase();
         if (k === "c") {
@@ -497,7 +615,7 @@ class TermSession {
         }
       }
       const combo = (e.metaKey ? "meta+" : "") + (e.altKey ? "alt+" : "") + e.key;
-      if (!e.ctrlKey && !e.shiftKey && READLINE_KEYS[combo] && !(e.altKey && s.optionIsMeta)) {
+      if (!e.ctrlKey && !e.shiftKey && READLINE_KEYS[combo] && !(e.altKey && s.optionIsMeta) && this.shellName !== "pwsh" && this.shellName !== "powershell") {
         this.input(READLINE_KEYS[combo]);
         e.preventDefault();
         return false;
@@ -514,13 +632,66 @@ class TermSession {
         if (term.hasSelection()) navigator.clipboard.writeText(term.getSelection()).catch(() => {});
       }, 200);
     });
-    term.textarea && term.textarea.addEventListener("focus", () => this.view.setActive(this));
+    if (term.textarea) {
+      term.textarea.addEventListener("focus", () => {
+        this.view.setActive(this);
+        if (!IS_MAC) this.plugin.enterTermScope();
+      });
+      term.textarea.addEventListener("blur", () => {
+        if (!IS_MAC) this.plugin.leaveTermScope();
+      });
+    }
 
     this.ro = new ResizeObserver(() => {
       cancelAnimationFrame(this.raf);
       this.raf = requestAnimationFrame(() => this.fitNow());
     });
     this.ro.observe(this.hostEl);
+  }
+
+  ctrlKeys(e) {
+    const term = this.term;
+    const k = e.key.toLowerCase();
+    const stop = () => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+    const paste = () => {
+      navigator.clipboard.readText().then((t) => t && term.paste(t)).catch(() => {});
+      return stop();
+    };
+    if (e.ctrlKey && !e.altKey && !e.metaKey && e.shiftKey) {
+      if (k === "c") {
+        if (term.hasSelection()) navigator.clipboard.writeText(term.getSelection());
+        return stop();
+      }
+      if (k === "v") return paste();
+      if (k === "f") {
+        stop();
+        this.openSearch();
+        return false;
+      }
+      if (k === "k") {
+        term.clear();
+        return stop();
+      }
+      if (k === "a") {
+        term.selectAll();
+        return stop();
+      }
+      if (k === "j" || k === "p" || k === "d") return false;
+    }
+    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      if (k === "j") return false;
+      if (IS_WIN && k === "c" && term.hasSelection()) {
+        navigator.clipboard.writeText(term.getSelection());
+        term.clearSelection();
+        return stop();
+      }
+      if (IS_WIN && k === "v") return paste();
+    }
+    return true;
   }
 
   fitNow() {
@@ -776,11 +947,11 @@ class EcuTerminalView extends ItemView {
       b.addEventListener("click", (e) => fn(e, b));
       return b;
     };
-    tool("plus", "Yeni terminal (⌘D)", () => this.addSession({ cwd: this.active && this.active.cwd }));
+    tool("plus", `Yeni terminal (${KEY.split})`, () => this.addSession({ cwd: this.active && this.active.cwd }));
     this.layoutBtn = tool("layout-grid", "Düzen", (e) => this.layoutMenu(e));
     this.broadcastBtn = tool("radio-tower", "Tüm terminallere yaz (MultiExec)", () => this.setBroadcast(!this.broadcast), "ecu-broadcast-btn");
     this.closeBtn = tool("x", "Terminalleri kapat", (e) => this.closeMenu(e));
-    this.hideBtn = tool("chevron-down", "Terminali gizle (⌘J)", () => this.plugin.toggle());
+    this.hideBtn = tool("chevron-down", `Terminali gizle (${KEY.toggle})`, () => this.plugin.toggle());
     this.gridEl = root.createDiv({ cls: "ecu-grid" });
     setTimeout(() => this.hideBtn && this.hideBtn.toggle(!this.isPanel), 0);
     this.ro = new ResizeObserver(() => {
@@ -1087,6 +1258,10 @@ module.exports = class EcuTerminal extends Plugin {
   async onload() {
     this.settings = Object.assign({}, DEFAULTS, await this.loadData());
     this.lastTerm = null;
+    this.termScope = new Scope();
+    this.termScope.register(["Mod"], "j", () => (this.toggle(), false));
+    this.termScope.register(["Mod", "Shift"], "j", () => (this.move(), false));
+    this.termScope.register(["Mod", "Shift"], "p", () => (this.app.commands.executeCommandById("command-palette:open"), false));
 
     this.registerView(VIEW, (leaf) => new EcuTerminalView(leaf, this));
     try {
@@ -1209,12 +1384,13 @@ module.exports = class EcuTerminal extends Plugin {
       window,
       "keydown",
       (evt) => {
-        if (!evt.metaKey || evt.ctrlKey || evt.altKey || evt.code !== "KeyD") return;
+        if (evt.code !== "KeyD" || evt.altKey) return;
+        if (IS_MAC ? !evt.metaKey || evt.ctrlKey : !evt.ctrlKey || !evt.shiftKey || evt.metaKey) return;
         const leaf = this.leafFromEl(evt.target);
         if (!leaf) return;
         evt.preventDefault();
         evt.stopPropagation();
-        this.split(evt.shiftKey ? "horizontal" : "vertical", leaf);
+        this.split(IS_MAC && evt.shiftKey ? "horizontal" : "vertical", leaf);
       },
       { capture: true }
     );
@@ -1256,7 +1432,20 @@ module.exports = class EcuTerminal extends Plugin {
     );
   }
 
+  enterTermScope() {
+    if (this.scopeOn) return;
+    this.app.keymap.pushScope(this.termScope);
+    this.scopeOn = true;
+  }
+
+  leaveTermScope() {
+    if (!this.scopeOn) return;
+    this.app.keymap.popScope(this.termScope);
+    this.scopeOn = false;
+  }
+
   onunload() {
+    this.leaveTermScope();
     document.querySelectorAll("." + HIDDEN).forEach((el) => el.classList.remove(HIDDEN));
     if (this.styleEl) this.styleEl.remove();
     (this.navButtons || []).forEach((b) => b.remove());
@@ -1295,10 +1484,10 @@ module.exports = class EcuTerminal extends Plugin {
         if (it.setChecked) it.setChecked(open && sess === v.active);
       });
     });
-    menu.addItem((i) => i.setTitle("Yeni terminal  ⌘D").setIcon("plus").onClick(() => this.split()));
+    menu.addItem((i) => i.setTitle(`Yeni terminal  ${KEY.split}`).setIcon("plus").onClick(() => this.split()));
     if (sessions.length > 1) menu.addItem((i) => i.setTitle(`Tüm terminalleri kapat (${sessions.length})`).setIcon("x-square").onClick(() => v.closeMany(null)));
     menu.addSeparator();
-    menu.addItem((i) => i.setTitle(open ? "Terminali gizle  ⌘J" : "Terminali göster  ⌘J").setIcon(open ? "eye-off" : "terminal").onClick(() => this.toggle()));
+    menu.addItem((i) => i.setTitle(open ? `Terminali gizle  ${KEY.toggle}` : `Terminali göster  ${KEY.toggle}`).setIcon(open ? "eye-off" : "terminal").onClick(() => this.toggle()));
     menu.addItem((i) => i.setTitle("Kasa klasöründe yeni terminal").setIcon("folder-open").onClick(() => this.openAt(null)));
     if (v && v.sessions) {
       menu.addSeparator();
@@ -1735,7 +1924,7 @@ module.exports = class EcuTerminal extends Plugin {
     );
     menu.addSeparator();
     const v = leaf.view;
-    menu.addItem((i) => i.setTitle("Yeni terminal  ⌘D").setIcon("plus").onClick(() => this.split(null, leaf)));
+    menu.addItem((i) => i.setTitle(`Yeni terminal  ${KEY.split}`).setIcon("plus").onClick(() => this.split(null, leaf)));
     menu.addItem((i) => i.setTitle("Düzen…").setIcon("layout-grid").onClick(() => v.layoutMenu(evt)));
     menu.addItem((i) => {
       i.setTitle("Tüm terminallere yaz (MultiExec)").setIcon("radio-tower").onClick(() => v.setBroadcast(!v.broadcast));
@@ -1829,8 +2018,8 @@ class EcuTerminalSettings extends PluginSettingTab {
     containerEl.createEl("h3", { text: "Shell" });
     new Setting(containerEl)
       .setName("Shell")
-      .setDesc(`Boş bırakırsan sistemdeki varsayılan kullanılır (${process.env.SHELL || "/bin/zsh"}). zsh'de komut sınırları kesin bilinir.`)
-      .addText((t) => t.setPlaceholder(process.env.SHELL || "/bin/zsh").setValue(p.settings.shellPath).onChange(async (v) => ((p.settings.shellPath = v.trim()), await save())));
+      .setDesc(`Boş bırakırsan sistemdeki varsayılan kullanılır (${defaultShell()}). zsh, bash ve PowerShell'de komut sınırları kesin bilinir.`)
+      .addText((t) => t.setPlaceholder(defaultShell()).setValue(p.settings.shellPath).onChange(async (v) => ((p.settings.shellPath = v.trim()), await save())));
     new Setting(containerEl)
       .setName("Başlangıç klasörü")
       .addDropdown((d) =>
@@ -1899,7 +2088,7 @@ class EcuTerminalSettings extends PluginSettingTab {
       .setName("Seçince kopyala")
       .setDesc("Fareyle seçtiğin metin otomatik panoya kopyalanır.")
       .addToggle((t) => t.setValue(p.settings.copyOnSelect).onChange(async (v) => ((p.settings.copyOnSelect = v), await save())));
-    new Setting(containerEl)
+    if (IS_MAC) new Setting(containerEl)
       .setName("Option tuşu Meta gibi davransın")
       .setDesc("Kapalıyken Option ile Türkçe/özel karakter yazılır ve ⌥←/→ kelime atlar. Açıkken Option, emacs tarzı Meta tuşu olur.")
       .addToggle((t) => t.setValue(p.settings.optionIsMeta).onChange(async (v) => ((p.settings.optionIsMeta = v), await save(), p.applyToAll())));
@@ -1918,7 +2107,9 @@ class EcuTerminalSettings extends PluginSettingTab {
 
     containerEl.createEl("p", {
       text:
-        "Cmd+J göster/gizle, Cmd+Shift+J sağ/alt arasında taşı. Cmd+D yeni terminal (ızgaraya eklenir), ⌥⌘+ok terminaller arası geçiş, Ctrl-D o terminali kapatır. Ayraçları sürükleyerek boyutlandır, çift tıkla eşitle. ⌘F ara, ⌘K ekranı temizle, ⌘+tık bağlantıyı açar. ⌥←/→ kelime, ⌘←/→ satır başı/sonu, ⌘⌫ satırı siler. Sağ tıkla menü.",
+        IS_MAC
+          ? "Cmd+J göster/gizle, Cmd+Shift+J sağ/alt arasında taşı. Cmd+D yeni terminal (ızgaraya eklenir), ⌥⌘+ok terminaller arası geçiş, Ctrl-D o terminali kapatır. Ayraçları sürükleyerek boyutlandır, çift tıkla eşitle. ⌘F ara, ⌘K ekranı temizle, ⌘+tık bağlantıyı açar. ⌥←/→ kelime, ⌘←/→ satır başı/sonu, ⌘⌫ satırı siler. Sağ tıkla menü."
+          : `Ctrl+J göster/gizle, Ctrl+Shift+J sağ/alt arasında taşı. Ctrl+Shift+D yeni terminal (ızgaraya eklenir), Alt+ok terminaller arası geçiş. Ctrl+Shift+C kopyala, ${KEY.paste} yapıştır, Ctrl+Shift+F ara, Ctrl+Shift+K ekranı temizle, Ctrl+Shift+P komut paleti. Terminal odaktayken diğer Ctrl tuşları kabuğa gider. Ctrl+tık bağlantıyı açar. Sağ tıkla menü.`,
       cls: "setting-item-description",
     });
   }
