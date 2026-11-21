@@ -5,6 +5,7 @@ const { WebLinksAddon } = require("@xterm/addon-web-links");
 const { SerializeAddon } = require("@xterm/addon-serialize");
 const { SearchAddon } = require("@xterm/addon-search");
 const { Unicode11Addon } = require("@xterm/addon-unicode11");
+const { pipeData } = require("./flow");
 
 const STRINGS = {
   en: {
@@ -860,10 +861,7 @@ class TermSession {
       return;
     }
     this.ptyProc = p;
-    p.onData((d) => {
-      term.write(d);
-      if (this.remoteRun) this.checkRemoteDone();
-    });
+    this.pipe(p, term);
     term.onData((d) => this.input(d));
     term.onBinary((d) => {
       this.touched = true;
@@ -875,6 +873,12 @@ class TermSession {
     });
     this.updateCaption();
     this.restore = {};
+  }
+
+  pipe(p, term) {
+    return pipeData(p, term, () => {
+      if (this.remoteRun) this.checkRemoteDone();
+    });
   }
 
   input(d) {
@@ -982,7 +986,7 @@ class TermSession {
         const k = e.key.toLowerCase();
         if (k === "c") {
           if (term.hasSelection()) {
-            navigator.clipboard.writeText(term.getSelection());
+            this.hostEl.win.navigator.clipboard.writeText(term.getSelection()).catch(() => {});
             term.clearSelection();
           }
           e.preventDefault();
@@ -1021,7 +1025,7 @@ class TermSession {
       if (!this.plugin.settings.copyOnSelect) return;
       clearTimeout(selTimer);
       selTimer = setTimeout(() => {
-        if (term.hasSelection()) navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+        if (term.hasSelection()) this.hostEl.win.navigator.clipboard.writeText(term.getSelection()).catch(() => {});
       }, 200);
     });
     if (term.textarea) {
@@ -1034,9 +1038,10 @@ class TermSession {
       });
     }
 
-    this.ro = new ResizeObserver(() => {
-      cancelAnimationFrame(this.raf);
-      this.raf = requestAnimationFrame(() => this.fitNow());
+    const win = this.hostEl.win;
+    this.ro = new win.ResizeObserver(() => {
+      win.cancelAnimationFrame(this.raf);
+      this.raf = win.requestAnimationFrame(() => this.fitNow());
     });
     this.ro.observe(this.hostEl);
   }
@@ -1050,12 +1055,12 @@ class TermSession {
       return false;
     };
     const paste = () => {
-      navigator.clipboard.readText().then((t) => t && term.paste(t)).catch(() => {});
+      this.hostEl.win.navigator.clipboard.readText().then((t) => t && term.paste(t)).catch(() => {});
       return stop();
     };
     if (e.ctrlKey && !e.altKey && !e.metaKey && e.shiftKey) {
       if (k === "c") {
-        if (term.hasSelection()) navigator.clipboard.writeText(term.getSelection());
+        if (term.hasSelection()) this.hostEl.win.navigator.clipboard.writeText(term.getSelection()).catch(() => {});
         return stop();
       }
       if (k === "v") return paste();
@@ -1077,7 +1082,7 @@ class TermSession {
     if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
       if (k === "j") return false;
       if (IS_WIN && k === "c" && term.hasSelection()) {
-        navigator.clipboard.writeText(term.getSelection());
+        this.hostEl.win.navigator.clipboard.writeText(term.getSelection()).catch(() => {});
         term.clearSelection();
         return stop();
       }
@@ -1119,7 +1124,7 @@ class TermSession {
   }
 
   isVisible() {
-    return !!(this.el.offsetWidth && this.el.offsetHeight) && !document.hidden;
+    return !!(this.el.offsetWidth && this.el.offsetHeight) && !this.el.doc.hidden;
   }
 
   focus() {
@@ -1387,7 +1392,7 @@ class EcuTerminalView extends ItemView {
     this.hideBtn = tool("chevron-down", t("toolbar.hide"), () => this.plugin.toggle());
     this.gridEl = root.createDiv({ cls: "ecu-grid" });
     setTimeout(() => this.hideBtn && this.hideBtn.toggle(!this.isPanel), 0);
-    this.ro = new ResizeObserver(() => {
+    this.ro = new this.gridEl.win.ResizeObserver(() => {
       const shape = this.bestShape();
       if (this.layout === "auto" && (shape.cols !== this.grid.cols || shape.rows !== this.grid.rows)) this.relayout();
     });
@@ -1624,7 +1629,7 @@ class EcuTerminalView extends ItemView {
     for (let c = 0; c < cols - 1; c++) this.makeGutter("col", c, rows);
     for (let r = 0; r < rows - 1; r++) this.makeGutter("row", r, cols);
     this.updateToolbar();
-    requestAnimationFrame(() => this.sessions.forEach((s) => s.fitNow()));
+    g.win.requestAnimationFrame(() => this.sessions.forEach((s) => s.fitNow()));
   }
 
   makeGutter(kind, idx, span) {
@@ -1811,35 +1816,9 @@ module.exports = class EcuTerminal extends Plugin {
       callback: () => this.capture(this.activeTermLeaf(), "selection"),
     });
 
-    this.registerDomEvent(
-      window,
-      "keydown",
-      (evt) => {
-        if (evt.code !== "KeyD" || evt.altKey) return;
-        if (IS_MAC ? !evt.metaKey || evt.ctrlKey : !evt.ctrlKey || !evt.shiftKey || evt.metaKey) return;
-        const leaf = this.leafFromEl(evt.target);
-        if (!leaf) return;
-        evt.preventDefault();
-        evt.stopPropagation();
-        this.split(IS_MAC && evt.shiftKey ? "horizontal" : "vertical", leaf);
-      },
-      { capture: true }
-    );
-
-    this.registerDomEvent(
-      document,
-      "contextmenu",
-      (evt) => {
-        const leaf = this.leafFromEl(evt.target);
-        if (!leaf) return;
-        evt.preventDefault();
-        evt.stopPropagation();
-        const sess = leaf.view.sessionFromEl && leaf.view.sessionFromEl(evt.target);
-        if (sess) leaf.view.setActive(sess);
-        this.showMenu(evt, leaf);
-      },
-      { capture: true }
-    );
+    this.watchedWins = new WeakSet();
+    this.watchWindow(window);
+    this.registerEvent(this.app.workspace.on("window-open", (ww, win) => this.watchWindow(win)));
 
     this.navButtons = [];
     this.winFocused = true;
@@ -1861,6 +1840,7 @@ module.exports = class EcuTerminal extends Plugin {
         await leaf.setViewState({ type: VIEW, active: false, state: { cwd: st.state && st.state.cwd } });
       }
       if (this.settings.hidden && this.leaves().length) this.applyHidden(true);
+      this.workspaceWins().forEach((w) => this.watchWindow(w));
     });
 
     this.registerEvent(
@@ -1907,8 +1887,8 @@ module.exports = class EcuTerminal extends Plugin {
 
   onunload() {
     this.leaveTermScope();
-    document.querySelectorAll("." + HIDDEN).forEach((el) => el.classList.remove(HIDDEN));
-    document.querySelectorAll("." + BEFORE_HIDDEN).forEach((el) => el.classList.remove(BEFORE_HIDDEN));
+    this.unmarkAll(HIDDEN);
+    this.unmarkAll(BEFORE_HIDDEN);
     for (const el of this.termTabEls || []) el.classList.remove(TERM_TABS);
     this.termTabEls = null;
     (this.navButtons || []).forEach((b) => b.remove());
@@ -2157,6 +2137,53 @@ module.exports = class EcuTerminal extends Plugin {
     return this.allLeaves().find((l) => l.view.containerEl === content) || null;
   }
 
+  watchWindow(win) {
+    if (!win || this.watchedWins.has(win)) return;
+    this.watchedWins.add(win);
+    this.registerDomEvent(
+      win,
+      "keydown",
+      (evt) => {
+        if (evt.code !== "KeyD" || evt.altKey) return;
+        if (IS_MAC ? !evt.metaKey || evt.ctrlKey : !evt.ctrlKey || !evt.shiftKey || evt.metaKey) return;
+        const leaf = this.leafFromEl(evt.target);
+        if (!leaf) return;
+        evt.preventDefault();
+        evt.stopPropagation();
+        this.split(IS_MAC && evt.shiftKey ? "horizontal" : "vertical", leaf);
+      },
+      { capture: true }
+    );
+    this.registerDomEvent(
+      win.document,
+      "contextmenu",
+      (evt) => {
+        const leaf = this.leafFromEl(evt.target);
+        if (!leaf) return;
+        evt.preventDefault();
+        evt.stopPropagation();
+        const sess = leaf.view.sessionFromEl && leaf.view.sessionFromEl(evt.target);
+        if (sess) leaf.view.setActive(sess);
+        this.showMenu(evt, leaf);
+      },
+      { capture: true }
+    );
+  }
+
+  workspaceWins() {
+    const wins = new Set([window]);
+    this.app.workspace.iterateAllLeaves((l) => {
+      const c = l.getContainer && l.getContainer();
+      const w = (c && c.win) || (l.view && l.view.containerEl && l.view.containerEl.win);
+      if (w) wins.add(w);
+    });
+    return [...wins];
+  }
+
+  unmarkAll(cls) {
+    for (const w of this.workspaceWins()) w.document.querySelectorAll("." + cls).forEach((el) => el.classList.remove(cls));
+  }
+
   termGroup(leaf) {
     const g = leaf.parent;
     if (!g || !g.containerEl || !g.children) return null;
@@ -2173,11 +2200,13 @@ module.exports = class EcuTerminal extends Plugin {
   }
 
   syncHiddenMarks() {
-    document.querySelectorAll("." + BEFORE_HIDDEN).forEach((el) => el.classList.remove(BEFORE_HIDDEN));
-    document.querySelectorAll(".workspace-split > ." + HIDDEN).forEach((el) => {
-      const prev = el.previousElementSibling;
-      if (prev) prev.classList.add(BEFORE_HIDDEN);
-    });
+    this.unmarkAll(BEFORE_HIDDEN);
+    for (const w of this.workspaceWins()) {
+      w.document.querySelectorAll(".workspace-split > ." + HIDDEN).forEach((el) => {
+        const prev = el.previousElementSibling;
+        if (prev) prev.classList.add(BEFORE_HIDDEN);
+      });
+    }
   }
 
   syncTermTabs() {
@@ -2193,7 +2222,7 @@ module.exports = class EcuTerminal extends Plugin {
 
   applyHidden(hidden) {
     if (!hidden) {
-      document.querySelectorAll("." + HIDDEN).forEach((el) => el.classList.remove(HIDDEN));
+      this.unmarkAll(HIDDEN);
       this.syncHiddenMarks();
       return;
     }
@@ -2403,16 +2432,20 @@ module.exports = class EcuTerminal extends Plugin {
   showMenu(evt, leaf) {
     const s = this.session(leaf);
     const term = s && s.terminal;
+    const clip = leaf.view.containerEl.win.navigator.clipboard;
     const menu = new Menu();
     menu.addItem((i) =>
       i.setTitle(t("menu.copy")).setIcon("copy").setDisabled(!term || !term.hasSelection()).onClick(() => {
-        navigator.clipboard.writeText(term.getSelection());
+        clip.writeText(term.getSelection()).catch(() => {});
         term.clearSelection();
       })
     );
     menu.addItem((i) =>
       i.setTitle(t("menu.paste")).setIcon("clipboard-paste").setDisabled(!term).onClick(async () => {
-        term.paste(await navigator.clipboard.readText());
+        try {
+          term.paste(await clip.readText());
+        } catch (e) {
+        }
         term.focus();
       })
     );
