@@ -44,7 +44,7 @@ const STRINGS = {
     "toolbar.new": "New terminal ({key})",
     "toolbar.layout": "Layout",
     "toolbar.close": "Close terminals",
-    "toolbar.hide": "Hide terminal ({key})",
+    "toolbar.hide": "Hide terminal",
     "toolbar.sessions": "Terminal  ·  {n} sessions",
     "tile.new": "New terminal",
     "common.broadcast": "Type into all terminals (MultiExec)",
@@ -74,8 +74,8 @@ const STRINGS = {
     "nav.button": "Terminal (right-click: Terminal Panel)",
     "nav.panel": "Terminal Panel (full-screen tab)",
     "menu.newKey": "New terminal  {key}",
-    "nav.hideKey": "Hide terminal  {key}",
-    "nav.showKey": "Show terminal  {key}",
+    "nav.hideKey": "Hide terminal",
+    "nav.showKey": "Show terminal",
     "nav.newInVault": "New terminal in vault folder",
     "common.moveBottom": "Move to bottom",
     "common.moveRight": "Move to right",
@@ -141,8 +141,8 @@ const STRINGS = {
     "set.optionMeta": "Use Option as Meta",
     "set.optionMetaDesc": "When off, Option types special/accented characters and ⌥←/→ jumps by word. When on, Option acts as an emacs-style Meta key.",
     "set.scrollback": "Scrollback lines",
-    "set.helpMac": "Cmd+J show/hide, Cmd+Shift+J move between right/bottom. Cmd+D new terminal (added to the grid), ⌥⌘+arrow switch between terminals, Ctrl-D closes that terminal. Drag the dividers to resize, double-click to equalize. ⌘F search, ⌘K clear screen, ⌘+click opens a link. ⌥←/→ word, ⌘←/→ start/end of line, ⌘⌫ deletes the line. Right-click for the menu.",
-    "set.helpOther": "Ctrl+J show/hide, Ctrl+Shift+J move between right/bottom. Ctrl+Shift+D new terminal (added to the grid), Alt+arrow switch between terminals. Ctrl+Shift+C copy, {paste} paste, Ctrl+Shift+F search, Ctrl+Shift+K clear screen, Ctrl+Shift+P command palette. While the terminal has focus, other Ctrl keys go to the shell. Ctrl+click opens a link. Right-click for the menu.",
+    "set.helpMac": "Give \"Show / hide terminal\" and \"Move terminal\" a hotkey under Settings > Hotkeys (for example Cmd+J and Cmd+Shift+J). Cmd+D new terminal (added to the grid), ⌥⌘+arrow switch between terminals, Ctrl-D closes that terminal. Drag the dividers to resize, double-click to equalize. ⌘F search, ⌘K clear screen, ⌘+click opens a link. ⌥←/→ word, ⌘←/→ start/end of line, ⌘⌫ deletes the line. Right-click for the menu.",
+    "set.helpOther": "Give \"Show / hide terminal\" and \"Move terminal\" a hotkey under Settings > Hotkeys (for example Ctrl+J and Ctrl+Shift+J). Ctrl+Shift+D new terminal (added to the grid), Alt+arrow switch between terminals. Ctrl+Shift+C copy, {paste} paste, Ctrl+Shift+F search, Ctrl+Shift+K clear screen, Ctrl+Shift+P command palette. While the terminal has focus, other Ctrl keys go to the shell. Ctrl+click opens a link. Right-click for the menu.",
   },
   tr: {
     "common.language": "Dil",
@@ -181,7 +181,7 @@ const STRINGS = {
     "toolbar.new": "Yeni terminal ({key})",
     "toolbar.layout": "Düzen",
     "toolbar.close": "Terminalleri kapat",
-    "toolbar.hide": "Terminali gizle ({key})",
+    "toolbar.hide": "Terminali gizle",
     "toolbar.sessions": "Terminal  ·  {n} oturum",
     "tile.new": "Yeni terminal",
     "common.broadcast": "Tüm terminallere yaz (MultiExec)",
@@ -211,8 +211,8 @@ const STRINGS = {
     "nav.button": "Terminal (sağ tık: Terminal Paneli)",
     "nav.panel": "Terminal Paneli (tam ekran sekme)",
     "menu.newKey": "Yeni terminal  {key}",
-    "nav.hideKey": "Terminali gizle  {key}",
-    "nav.showKey": "Terminali göster  {key}",
+    "nav.hideKey": "Terminali gizle",
+    "nav.showKey": "Terminali göster",
     "nav.newInVault": "Kasa klasöründe yeni terminal",
     "common.moveBottom": "Alta taşı",
     "common.moveRight": "Sağa taşı",
@@ -278,8 +278,8 @@ const STRINGS = {
     "set.optionMeta": "Option tuşu Meta gibi davransın",
     "set.optionMetaDesc": "Kapalıyken Option ile Türkçe/özel karakter yazılır ve ⌥←/→ kelime atlar. Açıkken Option, emacs tarzı Meta tuşu olur.",
     "set.scrollback": "Geçmiş satır sayısı",
-    "set.helpMac": "Cmd+J göster/gizle, Cmd+Shift+J sağ/alt arasında taşı. Cmd+D yeni terminal (ızgaraya eklenir), ⌥⌘+ok terminaller arası geçiş, Ctrl-D o terminali kapatır. Ayraçları sürükleyerek boyutlandır, çift tıkla eşitle. ⌘F ara, ⌘K ekranı temizle, ⌘+tık bağlantıyı açar. ⌥←/→ kelime, ⌘←/→ satır başı/sonu, ⌘⌫ satırı siler. Sağ tıkla menü.",
-    "set.helpOther": "Ctrl+J göster/gizle, Ctrl+Shift+J sağ/alt arasında taşı. Ctrl+Shift+D yeni terminal (ızgaraya eklenir), Alt+ok terminaller arası geçiş. Ctrl+Shift+C kopyala, {paste} yapıştır, Ctrl+Shift+F ara, Ctrl+Shift+K ekranı temizle, Ctrl+Shift+P komut paleti. Terminal odaktayken diğer Ctrl tuşları kabuğa gider. Ctrl+tık bağlantıyı açar. Sağ tıkla menü.",
+    "set.helpMac": "\"Terminali göster / gizle\" ve \"Terminali taşı\" komutlarına Ayarlar > Kısayollar'dan kısayol ata (örneğin Cmd+J ve Cmd+Shift+J). Cmd+D yeni terminal (ızgaraya eklenir), ⌥⌘+ok terminaller arası geçiş, Ctrl-D o terminali kapatır. Ayraçları sürükleyerek boyutlandır, çift tıkla eşitle. ⌘F ara, ⌘K ekranı temizle, ⌘+tık bağlantıyı açar. ⌥←/→ kelime, ⌘←/→ satır başı/sonu, ⌘⌫ satırı siler. Sağ tıkla menü.",
+    "set.helpOther": "\"Terminali göster / gizle\" ve \"Terminali taşı\" komutlarına Ayarlar > Kısayollar'dan kısayol ata (örneğin Ctrl+J ve Ctrl+Shift+J). Ctrl+Shift+D yeni terminal (ızgaraya eklenir), Alt+ok terminaller arası geçiş. Ctrl+Shift+C kopyala, {paste} yapıştır, Ctrl+Shift+F ara, Ctrl+Shift+K ekranı temizle, Ctrl+Shift+P komut paleti. Terminal odaktayken diğer Ctrl tuşları kabuğa gider. Ctrl+tık bağlantıyı açar. Sağ tıkla menü.",
   },
 };
 let uiLang = "en";
@@ -1355,7 +1355,7 @@ class EcuTerminalView extends ItemView {
     this.layoutBtn = tool("layout-grid", t("toolbar.layout"), (e) => this.layoutMenu(e));
     this.broadcastBtn = tool("radio-tower", t("common.broadcast"), () => this.setBroadcast(!this.broadcast), "ecu-broadcast-btn");
     this.closeBtn = tool("x", t("toolbar.close"), (e) => this.closeMenu(e));
-    this.hideBtn = tool("chevron-down", t("toolbar.hide", { key: KEY.toggle }), () => this.plugin.toggle());
+    this.hideBtn = tool("chevron-down", t("toolbar.hide"), () => this.plugin.toggle());
     this.gridEl = root.createDiv({ cls: "ecu-grid" });
     setTimeout(() => this.hideBtn && this.hideBtn.toggle(!this.isPanel), 0);
     this.ro = new ResizeObserver(() => {
@@ -1910,7 +1910,7 @@ module.exports = class EcuTerminal extends Plugin {
     menu.addItem((i) => i.setTitle(t("menu.newKey", { key: KEY.split })).setIcon("plus").onClick(() => this.split()));
     if (sessions.length > 1) menu.addItem((i) => i.setTitle(t("common.closeAllN", { n: sessions.length })).setIcon("x-square").onClick(() => v.closeMany(null)));
     menu.addSeparator();
-    menu.addItem((i) => i.setTitle(open ? t("nav.hideKey", { key: KEY.toggle }) : t("nav.showKey", { key: KEY.toggle })).setIcon(open ? "eye-off" : "terminal").onClick(() => this.toggle()));
+    menu.addItem((i) => i.setTitle(open ? t("nav.hideKey") : t("nav.showKey")).setIcon(open ? "eye-off" : "terminal").onClick(() => this.toggle()));
     menu.addItem((i) => i.setTitle(t("nav.newInVault")).setIcon("folder-open").onClick(() => this.openAt(null)));
     if (v && v.sessions) {
       menu.addSeparator();
