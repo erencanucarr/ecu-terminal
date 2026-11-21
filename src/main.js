@@ -730,6 +730,19 @@ function fmtDuration(ms) {
   return t("dur.hm", { h: Math.floor(m / 60), m: m % 60 });
 }
 
+const RESTART_MARKS = Object.values(STRINGS).map((x) => x["session.restarted"]).filter(Boolean);
+
+function plainLine(line) {
+  return line.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, "").trim();
+}
+
+function tidyRestored(buffer) {
+  const lines = buffer.replace(/\s+$/, "").split(/\r?\n/);
+  while (lines.length >= 2 && RESTART_MARKS.includes(plainLine(lines[lines.length - 2]))) lines.splice(lines.length - 2, 2);
+  while (lines.length && RESTART_MARKS.includes(plainLine(lines[lines.length - 1]))) lines.pop();
+  return lines.join("\r\n").replace(/\s+$/, "");
+}
+
 class TermSession {
   constructor(view, opts) {
     this.view = view;
@@ -821,9 +834,9 @@ class TermSession {
     } catch (e) {
     }
     term.open(this.hostEl);
-    if (this.restore.buffer) {
-      term.write(this.restore.buffer.replace(/\s+$/, "") + "\r\n\x1b[2m" + t("session.restarted") + "\x1b[0m\r\n");
-    }
+    this.savedBuffer = this.restore.buffer ? tidyRestored(this.restore.buffer) : null;
+    this.touched = false;
+    if (this.savedBuffer) term.write(this.savedBuffer + "\r\n\x1b[2m" + t("session.restarted") + "\x1b[0m\r\n");
     this.installHandlers();
     this.fitNow();
 
@@ -852,7 +865,10 @@ class TermSession {
       if (this.remoteRun) this.checkRemoteDone();
     });
     term.onData((d) => this.input(d));
-    term.onBinary((d) => this.ptyProc && this.ptyProc.write(nodeRequire("buffer").Buffer.from(d, "binary")));
+    term.onBinary((d) => {
+      this.touched = true;
+      if (this.ptyProc) this.ptyProc.write(nodeRequire("buffer").Buffer.from(d, "binary"));
+    });
     p.onExit(() => {
       this.ptyProc = null;
       if (!this.closed) this.view.removeSession(this);
@@ -862,9 +878,11 @@ class TermSession {
   }
 
   input(d) {
+    this.touched = true;
     if (d.includes("\r")) this.noteEnter();
     if (this.view.broadcast) {
       for (const s of this.view.sessions) {
+        s.touched = true;
         if (s.ptyProc) s.ptyProc.write(d);
         if (s !== this && d.includes("\r")) s.noteEnter();
       }
@@ -1199,7 +1217,9 @@ class TermSession {
 
   state() {
     const st = { cwd: this.cwd || this.restore.cwd || "" };
-    if (this.plugin.settings.persistBuffer && this.term && this.serialize) {
+    if (this.plugin.settings.persistBuffer && !this.touched && this.savedBuffer) {
+      st.buffer = this.savedBuffer;
+    } else if (this.plugin.settings.persistBuffer && this.term && this.serialize) {
       try {
         st.buffer = this.serialize.serialize({ scrollback: 300 });
       } catch (e) {
