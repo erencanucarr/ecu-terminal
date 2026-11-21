@@ -2144,7 +2144,7 @@ module.exports = class EcuTerminal extends Plugin {
   notifyDone(sess, info) {
     const s = this.settings;
     if (!s.notify || !info || info.ms < (Number(s.notifyAfter) || 10) * 1000) return;
-    const appFocused = this.appFocused();
+    const appFocused = this.appFocused(sess);
     const seen = appFocused && sess.isVisible() && !this.isHidden();
     if (s.notifyMode !== "always" && seen) return;
     const ok = info.exit == null ? null : info.exit === 0;
@@ -2167,7 +2167,9 @@ module.exports = class EcuTerminal extends Plugin {
     if (notice.noticeEl) notice.noticeEl.addEventListener("click", () => this.bringToFront(sess));
   }
 
-  appFocused() {
+  appFocused(sess) {
+    const doc = sess && sess.el.doc;
+    if (doc && doc !== document) return doc.hasFocus();
     try {
       const w = nodeRequire("@electron/remote").getCurrentWindow();
       return w.isFocused() && w.isVisible() && !w.isMinimized();
@@ -2177,12 +2179,17 @@ module.exports = class EcuTerminal extends Plugin {
   }
 
   async bringToFront(sess) {
+    const win = sess && sess.el.win;
     try {
-      const remote = nodeRequire("@electron/remote");
-      const w = remote.getCurrentWindow();
-      if (w.isMinimized()) w.restore();
-      w.show();
-      w.focus();
+      if (win && win !== window) {
+        win.focus();
+      } else {
+        const remote = nodeRequire("@electron/remote");
+        const w = remote.getCurrentWindow();
+        if (w.isMinimized()) w.restore();
+        w.show();
+        w.focus();
+      }
     } catch (e) {
       window.focus();
     }
