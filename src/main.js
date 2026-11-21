@@ -5,6 +5,7 @@ const { WebLinksAddon } = require("@xterm/addon-web-links");
 const { SerializeAddon } = require("@xterm/addon-serialize");
 const { SearchAddon } = require("@xterm/addon-search");
 const { Unicode11Addon } = require("@xterm/addon-unicode11");
+const { isSecretCommand, PROMPT_RE, splitPrompt, shQuote, shellKind, cleanShellEnv, hotkeyKey, hotkeyMatches } = require("./util");
 
 const STRINGS = {
   en: {
@@ -40,7 +41,7 @@ const STRINGS = {
     "layout.equalize": "Equalize sizes",
     "common.cancel": "Cancel",
     "view.terminal": "Terminal",
-    "view.panel": "Terminal Panel",
+    "view.panel": "Terminal panel",
     "toolbar.new": "New terminal ({key})",
     "toolbar.layout": "Layout",
     "toolbar.close": "Close terminals",
@@ -63,7 +64,7 @@ const STRINGS = {
     "cmd.splitDown": "New terminal below",
     "cmd.restart": "Restart terminal (new shell)",
     "cmd.move": "Move terminal (right / bottom)",
-    "cmd.openPanel": "Open Terminal Panel (full-screen tab)",
+    "cmd.openPanel": "Open terminal panel (full-screen tab)",
     "cmd.openHere": "Open terminal in the current note's folder",
     "cmd.closeAll": "Close all terminals",
     "common.captureLast": "Add last command and its output to note",
@@ -71,8 +72,8 @@ const STRINGS = {
     "menu.vaultFolder": "vault folder",
     "menu.openHere": "Open terminal here ({name})",
     "menu.openInNoteFolder": "Open terminal in this note's folder",
-    "nav.button": "Terminal (right-click: Terminal Panel)",
-    "nav.panel": "Terminal Panel (full-screen tab)",
+    "nav.button": "Terminal (right-click: terminal panel)",
+    "nav.panel": "Terminal panel (full-screen tab)",
     "menu.newKey": "New terminal  {key}",
     "nav.hideKey": "Hide terminal",
     "nav.showKey": "Show terminal",
@@ -119,6 +120,12 @@ const STRINGS = {
     "set.startCustom": "Custom folder",
     "set.persist": "Remember session",
     "set.persistDesc": "When Obsidian reopens, the terminal starts in the same folder and the previous screen content is shown (the shell restarts).",
+    "set.history": "Remember recent commands",
+    "set.historyDesc": "Keeps the last 40 commands you ran, with their folder, in this plugin's data.json (it syncs with your vault). ecu-newtab shows them under \"Recent commands\". Commands that look like they contain a password or token are never saved. Turning this off clears the list.",
+    "set.clearHistory": "Clear command history",
+    "set.clearHistoryDesc": "{n} commands saved.",
+    "set.clearHistoryBtn": "Clear",
+    "notice.historyCleared": "Command history cleared.",
     "set.hNotify": "Notify when a command finishes",
     "set.notify": "Send notification",
     "set.notifyDesc": "Tells you when a long-running command finishes: exit code (✓/✗), duration, and the server name if you're in ssh. Inside ssh, a command counts as finished when the prompt comes back.",
@@ -142,7 +149,7 @@ const STRINGS = {
     "set.optionMetaDesc": "When off, Option types special/accented characters and ⌥←/→ jumps by word. When on, Option acts as an emacs-style Meta key.",
     "set.scrollback": "Scrollback lines",
     "set.helpMac": "Give \"Show / hide terminal\" and \"Move terminal\" a hotkey under Settings > Hotkeys (for example Cmd+J and Cmd+Shift+J). Cmd+D new terminal (added to the grid), ⌥⌘+arrow switch between terminals, Ctrl-D closes that terminal. Drag the dividers to resize, double-click to equalize. ⌘F search, ⌘K clear screen, ⌘+click opens a link. ⌥←/→ word, ⌘←/→ start/end of line, ⌘⌫ deletes the line. Right-click for the menu.",
-    "set.helpOther": "Give \"Show / hide terminal\" and \"Move terminal\" a hotkey under Settings > Hotkeys (for example Ctrl+J and Ctrl+Shift+J). Ctrl+Shift+D new terminal (added to the grid), Alt+arrow switch between terminals. Ctrl+Shift+C copy, {paste} paste, Ctrl+Shift+F search, Ctrl+Shift+K clear screen, Ctrl+Shift+P command palette. While the terminal has focus, other Ctrl keys go to the shell. Ctrl+click opens a link. Right-click for the menu.",
+    "set.helpOther": "Give \"Show / hide terminal\" and \"Move terminal\" a hotkey under Settings > Hotkeys (for example Ctrl+J and Ctrl+Shift+J). Ctrl+Shift+D new terminal (added to the grid), Alt+arrow switch between terminals. Ctrl+Shift+C copy, {paste} paste, Ctrl+Shift+F search, Ctrl+Shift+K clear screen. While the terminal has focus, only the hotkeys you gave these two commands and the command palette reach Obsidian; other Ctrl keys go to the shell. Ctrl+click opens a link. Right-click for the menu.",
   },
   tr: {
     "common.language": "Dil",
@@ -177,7 +184,7 @@ const STRINGS = {
     "layout.equalize": "Boyutları eşitle",
     "common.cancel": "Vazgeç",
     "view.terminal": "Terminal",
-    "view.panel": "Terminal Paneli",
+    "view.panel": "Terminal paneli",
     "toolbar.new": "Yeni terminal ({key})",
     "toolbar.layout": "Düzen",
     "toolbar.close": "Terminalleri kapat",
@@ -200,7 +207,7 @@ const STRINGS = {
     "cmd.splitDown": "Alta yeni terminal",
     "cmd.restart": "Terminali yeniden başlat (yeni shell)",
     "cmd.move": "Terminali taşı (sağ / alt)",
-    "cmd.openPanel": "Terminal Panelini aç (tam ekran sekme)",
+    "cmd.openPanel": "Terminal panelini aç (tam ekran sekme)",
     "cmd.openHere": "Terminali açık notun klasöründe aç",
     "cmd.closeAll": "Tüm terminalleri kapat",
     "common.captureLast": "Son komutu ve çıktısını nota ekle",
@@ -208,8 +215,8 @@ const STRINGS = {
     "menu.vaultFolder": "kasa klasörü",
     "menu.openHere": "Terminali burada aç ({name})",
     "menu.openInNoteFolder": "Terminali bu notun klasöründe aç",
-    "nav.button": "Terminal (sağ tık: Terminal Paneli)",
-    "nav.panel": "Terminal Paneli (tam ekran sekme)",
+    "nav.button": "Terminal (sağ tık: terminal paneli)",
+    "nav.panel": "Terminal paneli (tam ekran sekme)",
     "menu.newKey": "Yeni terminal  {key}",
     "nav.hideKey": "Terminali gizle",
     "nav.showKey": "Terminali göster",
@@ -256,6 +263,12 @@ const STRINGS = {
     "set.startCustom": "Özel klasör",
     "set.persist": "Oturumu hatırla",
     "set.persistDesc": "Obsidian yeniden açılınca terminal aynı klasörde başlar ve önceki ekran içeriği görünür (shell yeniden başlar).",
+    "set.history": "Son komutları hatırla",
+    "set.historyDesc": "Çalıştırdığın son 40 komutu, klasörleriyle birlikte bu eklentinin data.json dosyasında tutar (kasanla birlikte eşitlenir). ecu-newtab bunları \"Son komutlar\" altında gösterir. Şifre ya da token içerdiği anlaşılan komutlar hiç kaydedilmez. Kapatınca liste silinir.",
+    "set.clearHistory": "Komut geçmişini temizle",
+    "set.clearHistoryDesc": "{n} komut kayıtlı.",
+    "set.clearHistoryBtn": "Temizle",
+    "notice.historyCleared": "Komut geçmişi temizlendi.",
     "set.hNotify": "Komut bitince bildirim",
     "set.notify": "Bildirim gönder",
     "set.notifyDesc": "Uzun süren bir komut bitince haber verir: çıkış kodu (✓/✗), süre ve ssh'teysen sunucu adıyla. ssh içindeki komutların bitişi prompt'un geri gelmesinden anlaşılır.",
@@ -279,7 +292,7 @@ const STRINGS = {
     "set.optionMetaDesc": "Kapalıyken Option ile Türkçe/özel karakter yazılır ve ⌥←/→ kelime atlar. Açıkken Option, emacs tarzı Meta tuşu olur.",
     "set.scrollback": "Geçmiş satır sayısı",
     "set.helpMac": "\"Terminali göster / gizle\" ve \"Terminali taşı\" komutlarına Ayarlar > Kısayollar'dan kısayol ata (örneğin Cmd+J ve Cmd+Shift+J). Cmd+D yeni terminal (ızgaraya eklenir), ⌥⌘+ok terminaller arası geçiş, Ctrl-D o terminali kapatır. Ayraçları sürükleyerek boyutlandır, çift tıkla eşitle. ⌘F ara, ⌘K ekranı temizle, ⌘+tık bağlantıyı açar. ⌥←/→ kelime, ⌘←/→ satır başı/sonu, ⌘⌫ satırı siler. Sağ tıkla menü.",
-    "set.helpOther": "\"Terminali göster / gizle\" ve \"Terminali taşı\" komutlarına Ayarlar > Kısayollar'dan kısayol ata (örneğin Ctrl+J ve Ctrl+Shift+J). Ctrl+Shift+D yeni terminal (ızgaraya eklenir), Alt+ok terminaller arası geçiş. Ctrl+Shift+C kopyala, {paste} yapıştır, Ctrl+Shift+F ara, Ctrl+Shift+K ekranı temizle, Ctrl+Shift+P komut paleti. Terminal odaktayken diğer Ctrl tuşları kabuğa gider. Ctrl+tık bağlantıyı açar. Sağ tıkla menü.",
+    "set.helpOther": "\"Terminali göster / gizle\" ve \"Terminali taşı\" komutlarına Ayarlar > Kısayollar'dan kısayol ata (örneğin Ctrl+J ve Ctrl+Shift+J). Ctrl+Shift+D yeni terminal (ızgaraya eklenir), Alt+ok terminaller arası geçiş. Ctrl+Shift+C kopyala, {paste} yapıştır, Ctrl+Shift+F ara, Ctrl+Shift+K ekranı temizle. Terminal odaktayken yalnızca bu iki komuta ve komut paletine atadığın kısayollar Obsidian'a ulaşır; diğer Ctrl tuşları kabuğa gider. Ctrl+tık bağlantıyı açar. Sağ tıkla menü.",
   },
 };
 let uiLang = "en";
@@ -331,12 +344,6 @@ function defaultShell() {
   return process.env.SHELL || (IS_MAC ? "/bin/zsh" : "/bin/bash");
 }
 
-function shellKind(shell) {
-  const n = String(shell).split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, "");
-  if (n === "zsh" || n === "bash" || n === "pwsh" || n === "powershell" || n === "cmd") return n;
-  return "other";
-}
-
 const VIEW = "ecu-terminal-view";
 const LEGACY_VIEW = "terminal-view";
 const HIDDEN = "qt-hidden";
@@ -366,13 +373,11 @@ const DEFAULTS = {
   notifyAfter: 10,
   notifyMode: "away",
   notifySound: true,
+  rememberCommands: true,
   history: [],
 };
 
-const SECRET_RE = /passw(or)?d|passwd|secret|token|api[-_]?key|bearer|credential/i;
 const TRIVIAL_RE = /^(exit|logout|clear|reset|ls|ll|la|pwd|cd|cd \S+|history|q|:q)$/;
-
-const PROMPT_RE = /^(?:\([^)\n]{1,40}\)\s*)?(?:\[[^\]\n]{1,80}\]\s?[$#%]|[\w.-]+@[\w.-]+[^\n$#%]{0,80}?[$#%]|\S{0,40}\s?[❯➜]|(?:PS )?[A-Za-z]:\\[^>\n]{0,160}>)\s/;
 
 function bufferLines(term) {
   const b = term.buffer.active;
@@ -385,12 +390,6 @@ function bufferLines(term) {
     else out.push(t);
   }
   return out;
-}
-
-function splitPrompt(line) {
-  const m = PROMPT_RE.exec(line);
-  if (!m) return null;
-  return { prompt: m[0].trim(), cmd: line.slice(m[0].length).trim() };
 }
 
 function hostOf(prompt) {
@@ -639,7 +638,7 @@ function writeShellIntegration(dir) {
   const files = {
     ".zshenv": `[[ -f "\${__ECU_USER_ZDOTDIR:-$HOME}/.zshenv" ]] && source "\${__ECU_USER_ZDOTDIR:-$HOME}/.zshenv"\n`,
     ".zprofile": `[[ -f "\${__ECU_USER_ZDOTDIR:-$HOME}/.zprofile" ]] && source "\${__ECU_USER_ZDOTDIR:-$HOME}/.zprofile"\n`,
-    ".zshrc": `source "${init}"\n`,
+    ".zshrc": `source ${shQuote(init)}\n`,
     "ecu-init.zsh": [
       "# ecu-terminal: zsh shell entegrasyonu",
       'if [[ -n "$__ECU_SHELL_INTEGRATION" ]]; then return 0; fi',
@@ -848,8 +847,7 @@ class TermSession {
       TERM_PROGRAM: "ecu-terminal",
       LANG: process.env.LANG || "en_US.UTF-8",
     });
-    delete env.ELECTRON_RUN_AS_NODE;
-    delete env.ELECTRON_NO_ATTACH_CONSOLE;
+    cleanShellEnv(env);
     const args = shellLaunch(this.plugin, shell, env);
     this.cwd = this.startDir();
     let p;
@@ -865,10 +863,7 @@ class TermSession {
       if (this.remoteRun) this.checkRemoteDone();
     });
     term.onData((d) => this.input(d));
-    term.onBinary((d) => {
-      this.touched = true;
-      if (this.ptyProc) this.ptyProc.write(nodeRequire("buffer").Buffer.from(d, "binary"));
-    });
+    term.onBinary((d) => this.input(d, true));
     p.onExit(() => {
       this.ptyProc = null;
       if (!this.closed) this.view.removeSession(this);
@@ -877,16 +872,18 @@ class TermSession {
     this.restore = {};
   }
 
-  input(d) {
+  input(d, binary) {
     this.touched = true;
-    if (d.includes("\r")) this.noteEnter();
+    const data = binary ? nodeRequire("buffer").Buffer.from(d, "binary") : d;
+    const enter = !binary && d.includes("\r");
+    if (enter) this.noteEnter();
     if (this.view.broadcast) {
       for (const s of this.view.sessions) {
         s.touched = true;
-        if (s.ptyProc) s.ptyProc.write(d);
-        if (s !== this && d.includes("\r")) s.noteEnter();
+        if (s.ptyProc) s.ptyProc.write(data);
+        if (s !== this && enter) s.noteEnter();
       }
-    } else if (this.ptyProc) this.ptyProc.write(d);
+    } else if (this.ptyProc) this.ptyProc.write(data);
   }
 
   noteEnter() {
@@ -1072,10 +1069,10 @@ class TermSession {
         term.selectAll();
         return stop();
       }
-      if (k === "j" || k === "p" || k === "d") return false;
+      if (k === "d") return false;
     }
+    if (this.plugin.isTermHotkey(e)) return false;
     if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
-      if (k === "j") return false;
       if (IS_WIN && k === "c" && term.hasSelection()) {
         navigator.clipboard.writeText(term.getSelection());
         term.clearSelection();
@@ -1696,11 +1693,13 @@ module.exports = class EcuTerminal extends Plugin {
   async onload() {
     this.settings = Object.assign({}, DEFAULTS, await this.loadData());
     setUiLang(this.settings.uiLang);
+    const stored = this.settings.history;
+    const kept = this.settings.rememberCommands && Array.isArray(stored) ? stored.filter((h) => h && typeof h.cmd === "string" && !isSecretCommand(h.cmd)) : [];
+    this.settings.history = kept;
+    if (!Array.isArray(stored) || kept.length !== stored.length) await this.saveData(this.settings);
     this.lastTerm = null;
     this.termScope = new Scope();
-    this.termScope.register(["Mod"], "j", () => (this.toggle(), false));
-    this.termScope.register(["Mod", "Shift"], "j", () => (this.move(), false));
-    this.termScope.register(["Mod", "Shift"], "p", () => (this.app.commands.executeCommandById("command-palette:open"), false));
+    this.termKeys = [];
 
     this.registerView(VIEW, (leaf) => new EcuTerminalView(leaf, this));
 
@@ -1873,7 +1872,7 @@ module.exports = class EcuTerminal extends Plugin {
   recordCommand(cmd, host, cwd) {
     cmd = String(cmd || "").replace(/\s+$/, "");
     if (!cmd.trim() || /^\s/.test(cmd) || cmd.length > 400) return;
-    if (SECRET_RE.test(cmd) || TRIVIAL_RE.test(cmd.trim())) return;
+    if (!this.settings.rememberCommands || isSecretCommand(cmd) || TRIVIAL_RE.test(cmd.trim())) return;
     host = host || "";
     const list = (this.settings.history || []).filter((h) => !(h.cmd === cmd && (h.host || "") === host));
     list.unshift({ cmd, host, cwd: cwd || "", t: Date.now() });
@@ -1888,13 +1887,44 @@ module.exports = class EcuTerminal extends Plugin {
   }
 
   async clearHistory() {
+    clearTimeout(this.histTimer);
     this.settings.history = [];
     await this.saveData(this.settings);
     this.app.workspace.trigger("ecu-terminal:history");
   }
 
+  assignedHotkeys(id) {
+    try {
+      const hm = this.app.hotkeyManager;
+      if (!hm || typeof hm.getHotkeys !== "function") return [];
+      const own = hm.getHotkeys(id);
+      const keys = own !== undefined ? own : typeof hm.getDefaultHotkeys === "function" ? hm.getDefaultHotkeys(id) : null;
+      return Array.isArray(keys) ? keys.filter((h) => h && hotkeyKey(h)) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  termHotkeys() {
+    const out = [];
+    const add = (id, fn) => {
+      for (const h of this.assignedHotkeys(id)) out.push({ modifiers: Array.isArray(h.modifiers) ? h.modifiers : [], key: hotkeyKey(h), fn });
+    };
+    add(this.manifest.id + ":toggle", () => this.toggle());
+    add(this.manifest.id + ":move", () => this.move());
+    add("command-palette:open", () => this.app.commands.executeCommandById("command-palette:open"));
+    return out;
+  }
+
+  isTermHotkey(e) {
+    return this.termKeys.some((h) => hotkeyMatches(h, e, IS_MAC));
+  }
+
   enterTermScope() {
     if (this.scopeOn) return;
+    this.termKeys = this.termHotkeys();
+    this.termScope = new Scope();
+    for (const h of this.termKeys) this.termScope.register(h.modifiers, h.key, () => (h.fn(), false));
     this.app.keymap.pushScope(this.termScope);
     this.scopeOn = true;
   }
@@ -2580,6 +2610,30 @@ class EcuTerminalSettings extends PluginSettingTab {
       .setName(t("set.persist"))
       .setDesc(t("set.persistDesc"))
       .addToggle((t) => t.setValue(p.settings.persistBuffer).onChange(async (v) => ((p.settings.persistBuffer = v), await save())));
+    new Setting(containerEl)
+      .setName(t("set.history"))
+      .setDesc(t("set.historyDesc"))
+      .addToggle((tg) =>
+        tg.setValue(p.settings.rememberCommands).onChange(async (v) => {
+          p.settings.rememberCommands = v;
+          if (v) await save();
+          else await p.clearHistory();
+          this.display();
+        })
+      );
+    new Setting(containerEl)
+      .setName(t("set.clearHistory"))
+      .setDesc(t("set.clearHistoryDesc", { n: (p.settings.history || []).length }))
+      .addButton((b) =>
+        b
+          .setButtonText(t("set.clearHistoryBtn"))
+          .setDisabled(!(p.settings.history || []).length)
+          .onClick(async () => {
+            await p.clearHistory();
+            new Notice(t("notice.historyCleared"));
+            this.display();
+          })
+      );
 
     new Setting(containerEl).setName(t("set.hNotify")).setHeading();
     new Setting(containerEl)

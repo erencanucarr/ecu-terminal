@@ -3,7 +3,7 @@
 A standalone terminal for Obsidian desktop on macOS, Windows and Linux, built on xterm.js
 and node-pty. No other plugins required.
 
-![Terminal Panel with a four-pane grid](docs/terminal-panel.png)
+![Terminal panel with a four-pane grid](docs/terminal-panel.png)
 
 ![Docked terminal under a note](docs/docked-terminal.png)
 
@@ -11,7 +11,7 @@ and node-pty. No other plugins required.
 
 - **Docked terminal** at the bottom or right of the workspace, shown or hidden with one command
   (bind it to `Cmd/Ctrl+J`). Hiding does not kill the shell.
-- **Terminal Panel**: a full-size pinned tab used only as a terminal screen. Open it by
+- **Terminal panel**: a full-size pinned tab used only as a terminal screen. Open it by
   right-clicking the terminal icon in the file explorer's toolbar, or from the command palette.
 - **Split grid** (MobaXterm style): add terminals to a grid. Auto grid, side-by-side or stacked
   layouts. Drag the gutters to resize, double-click a gutter to equalize.
@@ -26,6 +26,8 @@ and node-pty. No other plugins required.
   terminals start in the vault folder, the note's folder or a custom directory.
 - Search, clear, copy on select, clickable links.
 - The session buffer is kept across restarts.
+- Recent commands are remembered for [ecu-newtab](https://github.com/erencanucarr/ecu-newtab)
+  (see [Command history](#command-history)).
 - Colors follow the active Obsidian theme.
 - Settings tab: position and size, shell, start folder, font, cursor, scrollback, notifications,
   and more.
@@ -72,7 +74,9 @@ The archives are made from the official `node-pty` 1.1.0 npm package (macOS, Win
 ## Keyboard shortcuts
 
 On Windows and Linux, plain `Ctrl` keys inside a terminal go to the shell (`Ctrl+C`, `Ctrl+R`,
-`Ctrl+W`…), so the terminal's own shortcuts use `Ctrl+Shift`.
+`Ctrl+W`, `Ctrl+J`…), so the terminal's own shortcuts use `Ctrl+Shift`. While a terminal has
+focus, the only Obsidian hotkeys that still work are the ones you assigned to **Show / hide
+terminal**, **Move terminal** and the command palette; the plugin adds no hotkeys of its own.
 
 | macOS | Windows / Linux | Action |
 | --- | --- | --- |
@@ -81,10 +85,23 @@ On Windows and Linux, plain `Ctrl` keys inside a terminal go to the shell (`Ctrl
 | `Cmd+C` / `Cmd+V` | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste (on Windows also `Ctrl+V`, and `Ctrl+C` with a selection) |
 | `Cmd+F` | `Ctrl+Shift+F` | Search in the terminal |
 | `Cmd+K` | `Ctrl+Shift+K` | Clear the terminal |
-| `Cmd+P` | `Ctrl+Shift+P` | Command palette while a terminal has focus |
+| `Cmd+P` | Your command palette hotkey (`Ctrl+P` by default) | Command palette while a terminal has focus |
 | `Ctrl+D` / `exit` | `Ctrl+D` / `exit` | Close the current terminal |
 
 Every action is also available in the command palette and in the terminal's right-click menu.
+If you'd rather keep `Ctrl+P` for the shell's history, give the command palette another hotkey.
+
+## Command history
+
+The last 40 commands you run (with the folder and SSH host) are stored in the plugin's
+`data.json`, which lives in your vault and syncs with it. [ecu-newtab](https://github.com/erencanucarr/ecu-newtab)
+shows them as "Recent commands". Commands that look like they carry a secret are never saved:
+anything mentioning a password, passphrase, token, API key or secret value, `mysql -p…`,
+`redis-cli -a`, `sshpass -p`, `docker login -p`, `curl -u user:pass`, `Authorization:` headers,
+URLs with `user:pass@`, known token formats (`ghp_`, `github_pat_`, `sk-`, `xoxb-`, `AKIA…`,
+`glpat-`…), `vault login`, and assignments like `DB_PASS=` or `PRIVATE_KEY=`. Stored entries
+are filtered again on every start. Turn off **Settings > ecu-terminal > Remember recent
+commands** to stop saving and clear the list, or use **Clear command history**.
 
 ## Language
 

@@ -7,7 +7,8 @@
   "author": "Eren Can Ucar",
   "scripts": {
     "build": "node esbuild.config.mjs",
-    "pack-node-pty": "bash scripts/pack-node-pty.sh"
+    "pack-node-pty": "bash scripts/pack-node-pty.sh",
+    "test": "node test/history.mjs"
   },
   "devDependencies": {
     "@xterm/addon-fit": "0.11.0",
