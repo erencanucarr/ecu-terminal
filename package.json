@@ -7,7 +7,7 @@
   "author": "Eren Can Ucar",
   "scripts": {
     "build": "node esbuild.config.mjs",
-    "test": "node test/session.mjs",
+    "test": "node test/session.mjs && node test/history.mjs",
     "pack-node-pty": "bash scripts/pack-node-pty.sh"
   },
   "devDependencies": {
