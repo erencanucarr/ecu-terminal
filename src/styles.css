@@ -1,18 +1,18 @@
-.workspace-split > .qt-hidden {
-  display: none !important;
+.workspace .workspace-split > .workspace-tabs.qt-hidden,
+.workspace .workspace-split > .workspace-split.qt-hidden {
+  display: none;
 }
 
-.workspace-split > *:has(+ .qt-hidden) > .workspace-leaf-resize-handle {
-  display: none !important;
+.workspace .workspace-split > .ecu-before-hidden > .workspace-leaf-resize-handle {
+  display: none;
 }
 
 .workspace-leaf-content[data-type="ecu-terminal-view"] > .view-header {
   display: none;
 }
 
-.workspace-tabs:has(> .workspace-tab-container > .workspace-leaf > .workspace-leaf-content[data-type="ecu-terminal-view"]):not(:has(.workspace-leaf-content:not([data-type="ecu-terminal-view"]))):not(:has(.ecu-term.is-panel))
-  > .workspace-tab-header-container {
-  display: none !important;
+.workspace .workspace-tabs.ecu-term-tabs > .workspace-tab-header-container {
+  display: none;
 }
 
 .workspace-leaf-content[data-type="ecu-terminal-view"] > .view-content.ecu-term {
@@ -89,8 +89,8 @@
 .ecu-grid:not(.is-single) .ecu-pane.is-active {
   border-color: var(--background-modifier-border-focus, var(--text-faint));
 }
-.ecu-term.is-broadcast .ecu-grid .ecu-pane {
-  border-color: var(--color-orange) !important;
+.view-content.ecu-term.is-broadcast .ecu-grid .ecu-pane {
+  border-color: var(--color-orange);
 }
 
 .ecu-pane-head {
@@ -139,16 +139,16 @@
   padding-bottom: 4px;
 }
 .ecu-pane-host .xterm,
-.ecu-pane-host .xterm-viewport,
-.ecu-pane-host .xterm-screen {
-  background-color: var(--background-primary) !important;
+.ecu-pane-host .xterm .xterm-viewport,
+.ecu-pane-host .xterm .xterm-screen {
+  background-color: var(--background-primary);
 }
 .ecu-pane-host .xterm-viewport::-webkit-scrollbar {
   width: 0;
 }
 .ecu-pane-host .xterm .scrollbar,
-.ecu-pane-host .xterm-scrollable-element > .scrollbar {
-  display: none !important;
+.ecu-pane-host .xterm .xterm-scrollable-element > .scrollbar {
+  display: none;
 }
 
 .ecu-add-tile {
@@ -198,17 +198,17 @@
 .ecu-gutter:hover::after {
   background: var(--background-modifier-border-hover);
 }
-body.ecu-resizing,
-body.ecu-resizing * {
-  user-select: none !important;
+.ecu-drag-shield {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-dragged-item, 80);
+  user-select: none;
 }
-body.ecu-resizing.is-col,
-body.ecu-resizing.is-col * {
-  cursor: col-resize !important;
+.ecu-drag-shield.is-col {
+  cursor: col-resize;
 }
-body.ecu-resizing.is-row,
-body.ecu-resizing.is-row * {
-  cursor: row-resize !important;
+.ecu-drag-shield.is-row {
+  cursor: row-resize;
 }
 
 .ecu-color-probe {

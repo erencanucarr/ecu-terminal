@@ -291,7 +291,8 @@ function resolveUiLang(pref) {
   if (pref === "en" || pref === "tr") return pref;
   let code = "";
   try {
-    code = (window.localStorage && window.localStorage.getItem("language")) || "";
+    const obs = require("obsidian");
+    code = typeof obs.getLanguage === "function" ? obs.getLanguage() : obs.moment.locale();
   } catch (e) {
     code = "";
   }
@@ -339,6 +340,8 @@ function shellKind(shell) {
 const VIEW = "ecu-terminal-view";
 const LEGACY_VIEW = "terminal-view";
 const HIDDEN = "qt-hidden";
+const BEFORE_HIDDEN = "ecu-before-hidden";
+const TERM_TABS = "ecu-term-tabs";
 const DEFAULTS = {
   uiLang: "auto",
   side: "bottom",
@@ -547,7 +550,7 @@ const BASH_INIT = (login) =>
     "__ecu_pc_start() { __ecu_ec=$?; __ecu_ready=; }",
     "__ecu_pc_end() {",
     "  printf '\\e]133;D;%s\\e\\\\' \"$__ecu_ec\"",
-    "  printf '\\e]7;file://%s%s\\e\\\\' \"${HOSTNAME}\" \"${PWD}\"",
+    "  printf '\\e]7;file://%s\\e\\\\' \"${PWD}\"",
     "  printf '\\e]133;A\\e\\\\'",
     "  __ecu_ready=1",
     "  return $__ecu_ec",
@@ -581,7 +584,7 @@ const PWSH_INIT = [
   "    $e = [char]27",
   "    $code = if ($ok) { 0 } elseif ($ec -is [int] -and $ec -ne 0) { $ec } else { 1 }",
   "    $dir = ($PWD.ProviderPath -replace '\\\\', '/')",
-  '    "$e]133;D;$code$e\\$e]7;file://$env:COMPUTERNAME/$dir$e\\$e]133;A$e\\" + (& $global:__ecuOrigPrompt)',
+  '    "$e]133;D;$code$e\\$e]7;file:///$dir$e\\$e]133;A$e\\" + (& $global:__ecuOrigPrompt)',
   "  }",
   "  if (Get-Module PSReadLine) {",
   "    $global:__ecuPrevHist = (Get-PSReadLineOption).AddToHistoryHandler",
@@ -647,7 +650,7 @@ function writeShellIntegration(dir) {
       "__ecu_precmd() {",
       '  local ec="$?"',
       "  printf '\\e]133;D;%s\\e\\\\' \"$ec\"",
-      "  printf '\\e]7;file://%s%s\\e\\\\' \"${HOST}\" \"${PWD}\"",
+      "  printf '\\e]7;file://%s\\e\\\\' \"${PWD}\"",
       "  printf '\\e]133;A\\e\\\\'",
       "}",
       "__ecu_preexec() {",
@@ -902,7 +905,12 @@ class TermSession {
       const arg = rest.join(";");
       if (kind === "E") this.pendingCmd = arg.trim();
       else if (kind === "B") {
-        this.commands.push({ cmd: this.pendingCmd, start: term.registerMarker(0), end: null, exit: null });
+        const start = term.registerMarker(0);
+        this.commands.push({ cmd: this.pendingCmd, start, end: null, exit: null });
+        if (!this.plugin.localHost && start) {
+          const p = splitPrompt(this.linesBetween(start.line - 1, start.line)[0] || "");
+          if (p && hostOf(p.prompt)) this.plugin.localHost = hostOf(p.prompt);
+        }
         this.localRun = { cmd: this.pendingCmd, t: Date.now() };
         this.plugin.recordCommand(this.pendingCmd, "", this.cwd);
         this.remoteRun = null;
@@ -1295,6 +1303,7 @@ class EcuTerminalView extends ItemView {
         this.leaf.updateHeader();
       } catch (e) {
       }
+      this.plugin.syncTermTabs();
     }
     if (state && !this.started) this.restore = state;
     await super.setState(state, result);
@@ -1617,7 +1626,8 @@ class EcuTerminalView extends ItemView {
       const b0 = sizes[idx + 1];
       const start = kind === "col" ? e.clientX : e.clientY;
       const min = total * (120 / Math.max(px, 1));
-      document.body.addClass("ecu-resizing", kind === "col" ? "is-col" : "is-row");
+      const doc = el.ownerDocument;
+      const shield = doc.body.createDiv({ cls: `ecu-drag-shield is-${kind}` });
       const move = (ev) => {
         const d = (((kind === "col" ? ev.clientX : ev.clientY) - start) / Math.max(px, 1)) * total;
         const a = Math.max(min, Math.min(a0 + b0 - min, a0 + d));
@@ -1627,14 +1637,14 @@ class EcuTerminalView extends ItemView {
         g.setCssProps({ [kind === "col" ? "--ecu-grid-cols" : "--ecu-grid-rows"]: tpl });
       };
       const up = () => {
-        document.removeEventListener("mousemove", move);
-        document.removeEventListener("mouseup", up);
-        document.body.removeClass("ecu-resizing", "is-col", "is-row");
+        doc.removeEventListener("mousemove", move);
+        doc.removeEventListener("mouseup", up);
+        shield.remove();
         this.sessions.forEach((s) => s.fitNow());
         this.app.workspace.requestSaveLayout();
       };
-      document.addEventListener("mousemove", move);
-      document.addEventListener("mouseup", up);
+      doc.addEventListener("mousemove", move);
+      doc.addEventListener("mouseup", up);
     });
   }
 
@@ -1815,10 +1825,17 @@ module.exports = class EcuTerminal extends Plugin {
     this.winFocused = true;
     this.registerDomEvent(window, "focus", () => (this.winFocused = true));
     this.registerDomEvent(window, "blur", () => (this.winFocused = false));
-    this.registerEvent(this.app.workspace.on("layout-change", () => this.addNavButtons()));
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => {
+        this.addNavButtons();
+        this.syncTermTabs();
+        this.syncHiddenMarks();
+      })
+    );
 
     this.app.workspace.onLayoutReady(async () => {
       this.addNavButtons();
+      this.syncTermTabs();
       for (const leaf of this.app.workspace.getLeavesOfType(LEGACY_VIEW)) {
         const st = leaf.getViewState();
         await leaf.setViewState({ type: VIEW, active: false, state: { cwd: st.state && st.state.cwd } });
@@ -1871,6 +1888,9 @@ module.exports = class EcuTerminal extends Plugin {
   onunload() {
     this.leaveTermScope();
     document.querySelectorAll("." + HIDDEN).forEach((el) => el.classList.remove(HIDDEN));
+    document.querySelectorAll("." + BEFORE_HIDDEN).forEach((el) => el.classList.remove(BEFORE_HIDDEN));
+    for (const el of this.termTabEls || []) el.classList.remove(TERM_TABS);
+    this.termTabEls = null;
     (this.navButtons || []).forEach((b) => b.remove());
   }
 
@@ -2097,6 +2117,7 @@ module.exports = class EcuTerminal extends Plugin {
       await leaf.setViewState({ type: VIEW, active: true, state: { panel: true } });
     }
     for (let p = leaf.parent; p && p.containerEl; p = p.parent) p.containerEl.classList.remove(HIDDEN);
+    this.syncHiddenMarks();
     if (leaf.setPinned && !leaf.getViewState().pinned) leaf.setPinned(true);
     this.app.workspace.revealLeaf(leaf);
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
@@ -2131,9 +2152,29 @@ module.exports = class EcuTerminal extends Plugin {
     return this.leaves().some((l) => l.parent && l.parent.containerEl && l.parent.containerEl.classList.contains(HIDDEN));
   }
 
+  syncHiddenMarks() {
+    document.querySelectorAll("." + BEFORE_HIDDEN).forEach((el) => el.classList.remove(BEFORE_HIDDEN));
+    document.querySelectorAll(".workspace-split > ." + HIDDEN).forEach((el) => {
+      const prev = el.previousElementSibling;
+      if (prev) prev.classList.add(BEFORE_HIDDEN);
+    });
+  }
+
+  syncTermTabs() {
+    const next = new Set();
+    for (const l of this.leaves()) {
+      const g = this.termGroup(l);
+      if (g && g.containerEl) next.add(g.containerEl);
+    }
+    for (const el of this.termTabEls || []) if (!next.has(el)) el.classList.remove(TERM_TABS);
+    next.forEach((el) => el.classList.add(TERM_TABS));
+    this.termTabEls = next;
+  }
+
   applyHidden(hidden) {
     if (!hidden) {
       document.querySelectorAll("." + HIDDEN).forEach((el) => el.classList.remove(HIDDEN));
+      this.syncHiddenMarks();
       return;
     }
     const root = this.app.workspace.rootSplit;
@@ -2152,6 +2193,7 @@ module.exports = class EcuTerminal extends Plugin {
         } else break;
       }
     });
+    this.syncHiddenMarks();
   }
 
   async saveHidden(hidden) {
@@ -2297,8 +2339,7 @@ module.exports = class EcuTerminal extends Plugin {
       if (!cap) return new Notice(t("notice.noLastCmd"));
     }
     if (!cap.cmd && !cap.output) return new Notice(t("notice.nothing"));
-    const local = os && os.userInfo ? `${os.userInfo().username}@${os.hostname().replace(/\.local$/, "")}` : "";
-    this.insertIntoNote(note, formatCapture(cap, { localHost: local }));
+    this.insertIntoNote(note, formatCapture(cap, { localHost: this.localHost || "" }));
     new Notice(t("notice.added", { name: note.view.file ? note.view.file.basename : "" }));
   }
 

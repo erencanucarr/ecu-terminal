@@ -1,8 +1,8 @@
 {
   "name": "ecu-terminal",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "private": true,
-  "description": "A terminal inside Obsidian, with split panes and command output to notes.",
+  "description": "A built-in terminal with split panes, command notifications and command output to notes.",
   "license": "MIT",
   "author": "Eren Can Ucar",
   "scripts": {
