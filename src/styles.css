@@ -151,6 +151,19 @@
   display: none;
 }
 
+.ecu-pane-exit {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+}
+.ecu-pane-failed {
+  padding: 12px;
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
 .ecu-add-tile {
   display: flex;
   align-items: center;

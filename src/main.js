@@ -5,6 +5,7 @@ const { WebLinksAddon } = require("@xterm/addon-web-links");
 const { SerializeAddon } = require("@xterm/addon-serialize");
 const { SearchAddon } = require("@xterm/addon-search");
 const { Unicode11Addon } = require("@xterm/addon-unicode11");
+const { tidyRestored: tidyBuffer, exitFailed, clampScrollback, SCROLLBACK_MIN, SCROLLBACK_MAX } = require("./session-util");
 
 const STRINGS = {
   en: {
@@ -29,6 +30,11 @@ const STRINGS = {
     "session.startFailed": "Couldn't start the terminal: {error}",
     "session.restarted": "── session restarted ──",
     "session.shellFailed": "Couldn't start the shell ({shell}): {error}",
+    "session.exited": "Shell exited (code {code}): {shell}",
+    "session.exitedSignal": "Shell exited (signal {signal}): {shell}",
+    "session.restartHint": "Press Enter or click Restart to start it again.",
+    "session.restart": "Restart",
+    "engine.redownload": "Download the engine again",
     "search.placeholder": "Search the terminal…",
     "search.notFound": "not found",
     "search.prev": "Previous (⇧↵)",
@@ -53,6 +59,10 @@ const STRINGS = {
     "confirm.busyOne": "A command is still running in {n} terminal{names}. Closing it will stop the command.",
     "confirm.busyMany": "Commands are still running in {n} terminals{names}. Closing them will stop these commands.",
     "confirm.closeAnyway": "Close anyway",
+    "confirm.moveTitle": "Move the terminal?",
+    "confirm.moveBusyOne": "A command is still running in {n} terminal{names}. Moving restarts the shell and stops the command.",
+    "confirm.moveBusyMany": "Commands are still running in {n} terminals{names}. Moving restarts the shells and stops these commands.",
+    "confirm.moveAnyway": "Move anyway",
     "common.closeThis": "Close this terminal",
     "common.closeOthers": "Close other terminals",
     "common.closeAllN": "Close all terminals ({n})",
@@ -141,6 +151,10 @@ const STRINGS = {
     "set.optionMeta": "Use Option as Meta",
     "set.optionMetaDesc": "When off, Option types special/accented characters and ⌥←/→ jumps by word. When on, Option acts as an emacs-style Meta key.",
     "set.scrollback": "Scrollback lines",
+    "set.scrollbackRange": "Between {min} and {max}.",
+    "set.engine": "Terminal engine",
+    "set.engineDesc": "node-pty {version} ({platform}). Download it again if terminals fail to start.",
+    "notice.engineInstalled": "Terminal engine downloaded. If terminals still fail to start, reload Obsidian.",
     "set.helpMac": "Give \"Show / hide terminal\" and \"Move terminal\" a hotkey under Settings > Hotkeys (for example Cmd+J and Cmd+Shift+J). Cmd+D new terminal (added to the grid), ⌥⌘+arrow switch between terminals, Ctrl-D closes that terminal. Drag the dividers to resize, double-click to equalize. ⌘F search, ⌘K clear screen, ⌘+click opens a link. ⌥←/→ word, ⌘←/→ start/end of line, ⌘⌫ deletes the line. Right-click for the menu.",
     "set.helpOther": "Give \"Show / hide terminal\" and \"Move terminal\" a hotkey under Settings > Hotkeys (for example Ctrl+J and Ctrl+Shift+J). Ctrl+Shift+D new terminal (added to the grid), Alt+arrow switch between terminals. Ctrl+Shift+C copy, {paste} paste, Ctrl+Shift+F search, Ctrl+Shift+K clear screen, Ctrl+Shift+P command palette. While the terminal has focus, other Ctrl keys go to the shell. Ctrl+click opens a link. Right-click for the menu.",
   },
@@ -166,6 +180,11 @@ const STRINGS = {
     "session.startFailed": "Terminal başlatılamadı: {error}",
     "session.restarted": "── oturum yeniden başlatıldı ──",
     "session.shellFailed": "Shell başlatılamadı ({shell}): {error}",
+    "session.exited": "Shell kapandı (çıkış kodu {code}): {shell}",
+    "session.exitedSignal": "Shell kapandı (sinyal {signal}): {shell}",
+    "session.restartHint": "Yeniden başlatmak için Enter'a bas ya da Yeniden başlat'a tıkla.",
+    "session.restart": "Yeniden başlat",
+    "engine.redownload": "Motoru yeniden indir",
     "search.placeholder": "Terminalde ara…",
     "search.notFound": "bulunamadı",
     "search.prev": "Önceki (⇧↵)",
@@ -190,6 +209,10 @@ const STRINGS = {
     "confirm.busyOne": "{n} terminalde hâlâ çalışan bir komut var{names}. Kapatırsan bu komutlar durdurulur.",
     "confirm.busyMany": "{n} terminalde hâlâ çalışan bir komut var{names}. Kapatırsan bu komutlar durdurulur.",
     "confirm.closeAnyway": "Yine de kapat",
+    "confirm.moveTitle": "Terminal taşınsın mı?",
+    "confirm.moveBusyOne": "{n} terminalde hâlâ çalışan bir komut var{names}. Taşımak shell'i yeniden başlatır ve komutu durdurur.",
+    "confirm.moveBusyMany": "{n} terminalde hâlâ çalışan komutlar var{names}. Taşımak shell'leri yeniden başlatır ve bu komutları durdurur.",
+    "confirm.moveAnyway": "Yine de taşı",
     "common.closeThis": "Bu terminali kapat",
     "common.closeOthers": "Diğer terminalleri kapat",
     "common.closeAllN": "Tüm terminalleri kapat ({n})",
@@ -278,6 +301,10 @@ const STRINGS = {
     "set.optionMeta": "Option tuşu Meta gibi davransın",
     "set.optionMetaDesc": "Kapalıyken Option ile Türkçe/özel karakter yazılır ve ⌥←/→ kelime atlar. Açıkken Option, emacs tarzı Meta tuşu olur.",
     "set.scrollback": "Geçmiş satır sayısı",
+    "set.scrollbackRange": "{min} ile {max} arasında.",
+    "set.engine": "Terminal motoru",
+    "set.engineDesc": "node-pty {version} ({platform}). Terminaller başlamıyorsa yeniden indir.",
+    "notice.engineInstalled": "Terminal motoru indirildi. Terminaller hâlâ başlamıyorsa Obsidian'ı yeniden yükle.",
     "set.helpMac": "\"Terminali göster / gizle\" ve \"Terminali taşı\" komutlarına Ayarlar > Kısayollar'dan kısayol ata (örneğin Cmd+J ve Cmd+Shift+J). Cmd+D yeni terminal (ızgaraya eklenir), ⌥⌘+ok terminaller arası geçiş, Ctrl-D o terminali kapatır. Ayraçları sürükleyerek boyutlandır, çift tıkla eşitle. ⌘F ara, ⌘K ekranı temizle, ⌘+tık bağlantıyı açar. ⌥←/→ kelime, ⌘←/→ satır başı/sonu, ⌘⌫ satırı siler. Sağ tıkla menü.",
     "set.helpOther": "\"Terminali göster / gizle\" ve \"Terminali taşı\" komutlarına Ayarlar > Kısayollar'dan kısayol ata (örneğin Ctrl+J ve Ctrl+Shift+J). Ctrl+Shift+D yeni terminal (ızgaraya eklenir), Alt+ok terminaller arası geçiş. Ctrl+Shift+C kopyala, {paste} yapıştır, Ctrl+Shift+F ara, Ctrl+Shift+K ekranı temizle, Ctrl+Shift+P komut paleti. Terminal odaktayken diğer Ctrl tuşları kabuğa gider. Ctrl+tık bağlantıyı açar. Sağ tıkla menü.",
   },
@@ -519,9 +546,21 @@ async function installEngine(dir) {
   fs.mkdirSync(tmp, { recursive: true });
   untar(nodeRequire("zlib").gunzipSync(gz), tmp);
   const final = path.join(dir, "node-pty");
-  fs.rmSync(final, { recursive: true, force: true });
-  fs.renameSync(path.join(tmp, "node-pty"), final);
+  const old = path.join(dir, ".node-pty-old");
+  fs.rmSync(old, { recursive: true, force: true });
+  if (fs.existsSync(final)) fs.renameSync(final, old);
+  try {
+    fs.renameSync(path.join(tmp, "node-pty"), final);
+  } catch (e) {
+    if (fs.existsSync(old) && !fs.existsSync(final)) fs.renameSync(old, final);
+    throw e;
+  }
   fs.rmSync(tmp, { recursive: true, force: true });
+  try {
+    fs.rmSync(old, { recursive: true, force: true });
+    if (process.platform === "darwin") fs.chmodSync(path.join(final, "prebuilds", PLATFORM_KEY, "spawn-helper"), 0o755);
+  } catch (e) {
+  }
 }
 
 let ENGINE = null;
@@ -732,15 +771,8 @@ function fmtDuration(ms) {
 
 const RESTART_MARKS = Object.values(STRINGS).map((x) => x["session.restarted"]).filter(Boolean);
 
-function plainLine(line) {
-  return line.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, "").trim();
-}
-
 function tidyRestored(buffer) {
-  const lines = buffer.replace(/\s+$/, "").split(/\r?\n/);
-  while (lines.length >= 2 && RESTART_MARKS.includes(plainLine(lines[lines.length - 2]))) lines.splice(lines.length - 2, 2);
-  while (lines.length && RESTART_MARKS.includes(plainLine(lines[lines.length - 1]))) lines.pop();
-  return lines.join("\r\n").replace(/\s+$/, "");
+  return tidyBuffer(buffer, RESTART_MARKS);
 }
 
 class TermSession {
@@ -787,6 +819,7 @@ class TermSession {
     };
     return (
       pick(this.restore.cwd) ||
+      pick(this.cwd) ||
       (s.startDir === "custom" && pick(s.customDir)) ||
       (s.startDir === "home" && os.homedir()) ||
       pick(this.plugin.vaultPath()) ||
@@ -800,9 +833,10 @@ class TermSession {
       E = this.plugin.engine();
     } catch (e) {
       console.error("[ecu-terminal] terminal motoru yüklenemedi", e);
-      this.hostEl.setText(t("session.startFailed", { error: e && e.message ? e.message : e }));
+      this.showEngineFailed(e);
       return;
     }
+    this.engineFailed = false;
     const s = this.plugin.settings;
     const term = new E.Terminal({
       fontFamily: s.fontFamily || DEFAULTS.fontFamily,
@@ -810,7 +844,7 @@ class TermSession {
       lineHeight: Number(s.lineHeight) || 1,
       cursorStyle: s.cursorStyle,
       cursorBlink: !!s.cursorBlink,
-      scrollback: Number(s.scrollback) || 5000,
+      scrollback: clampScrollback(s.scrollback, DEFAULTS.scrollback),
       minimumContrastRatio: Number(s.minimumContrastRatio) || 1,
       macOptionIsMeta: !!s.optionIsMeta,
       allowProposedApi: true,
@@ -839,7 +873,46 @@ class TermSession {
     if (this.savedBuffer) term.write(this.savedBuffer + "\r\n\x1b[2m" + t("session.restarted") + "\x1b[0m\r\n");
     this.installHandlers();
     this.fitNow();
+    term.onData((d) => this.input(d));
+    term.onBinary((d) => {
+      this.touched = true;
+      this.typed = true;
+      if (this.ptyProc) this.ptyProc.write(nodeRequire("buffer").Buffer.from(d, "binary"));
+    });
+    this.spawn();
+    this.restore = {};
+  }
 
+  showEngineFailed(e) {
+    this.engineFailed = true;
+    this.hostEl.empty();
+    const box = this.hostEl.createDiv({ cls: "ecu-pane-failed" });
+    box.createDiv({ text: t("session.startFailed", { error: e && e.message ? e.message : e }) });
+    const row = box.createDiv({ cls: "ecu-engine-row" });
+    const btn = row.createEl("button", { cls: "mod-cta", text: t("engine.redownload") });
+    const status = row.createSpan({ cls: "ecu-engine-status" });
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      status.setText(t("engine.downloading"));
+      try {
+        await this.plugin.installEngine();
+      } catch (err) {
+        btn.disabled = false;
+        status.setText(t("engine.downloadFailed", { error: err && err.message ? err.message : err }));
+      }
+    });
+  }
+
+  retryStart() {
+    if (this.closed || !this.engineFailed) return;
+    this.hostEl.empty();
+    this.start();
+  }
+
+  spawn() {
+    const term = this.term;
+    const s = this.plugin.settings;
+    const E = this.plugin.engine();
     const shell = s.shellPath || defaultShell();
     this.shellName = String(shell).split(/[\\/]/).pop().replace(/\.exe$/i, "").toLowerCase();
     const env = Object.assign({}, process.env, {
@@ -857,32 +930,90 @@ class TermSession {
       p = E.pty.spawn(shell, args, { name: "xterm-256color", cols: term.cols, rows: term.rows, cwd: this.cwd, env });
     } catch (e) {
       term.write(`\r\n\x1b[31m${t("session.shellFailed", { shell, error: e && e.message ? e.message : e })}\x1b[0m\r\n`);
+      this.showExited();
       return;
     }
     this.ptyProc = p;
-    p.onData((d) => {
-      term.write(d);
-      if (this.remoteRun) this.checkRemoteDone();
-    });
-    term.onData((d) => this.input(d));
-    term.onBinary((d) => {
-      this.touched = true;
-      if (this.ptyProc) this.ptyProc.write(nodeRequire("buffer").Buffer.from(d, "binary"));
-    });
-    p.onExit(() => {
-      this.ptyProc = null;
-      if (!this.closed) this.view.removeSession(this);
-    });
+    this.typed = false;
+    this.spawnedAt = Date.now();
+    this.ptySubs = [
+      p.onData((d) => {
+        term.write(d);
+        if (this.remoteRun) this.checkRemoteDone();
+      }),
+      p.onExit((ev) => this.ptyExited(p, ev, shell)),
+    ];
     this.updateCaption();
-    this.restore = {};
+  }
+
+  ptyExited(p, ev, shell) {
+    if (this.ptyProc !== p) return;
+    this.ptyProc = null;
+    this.localRun = this.remoteRun = null;
+    if (this.closed) return;
+    if (!exitFailed({ ms: Date.now() - this.spawnedAt, typed: this.typed })) return this.view.removeSession(this);
+    const signal = ev && ev.signal;
+    const msg = signal
+      ? t("session.exitedSignal", { signal, shell })
+      : t("session.exited", { code: ev && ev.exitCode != null ? ev.exitCode : "?", shell });
+    if (this.term) this.term.write(`\r\n\x1b[2m${msg}\x1b[0m\r\n`);
+    this.showExited();
+  }
+
+  showExited() {
+    this.exited = true;
+    if (this.term) this.term.write(`\x1b[2m${t("session.restartHint")}\x1b[0m\r\n`);
+    if (this.exitEl) return;
+    this.exitEl = this.el.createDiv({ cls: "ecu-pane-exit" });
+    const btn = this.exitEl.createEl("button", { cls: "mod-cta", text: t("session.restart") });
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.restartShell();
+    });
+  }
+
+  restartShell() {
+    if (this.closed || !this.exited || !this.term) return;
+    this.exited = false;
+    if (this.exitEl) {
+      this.exitEl.remove();
+      this.exitEl = null;
+    }
+    this.disposePty();
+    this.term.write("\r\n");
+    try {
+      this.spawn();
+    } catch (e) {
+      this.term.write(`\r\n\x1b[31m${t("session.startFailed", { error: e && e.message ? e.message : e })}\x1b[0m\r\n`);
+      this.showExited();
+      return;
+    }
+    this.fitNow();
+    this.focus();
+  }
+
+  disposePty() {
+    for (const d of this.ptySubs || []) {
+      try {
+        d.dispose();
+      } catch (e) {
+      }
+    }
+    this.ptySubs = null;
   }
 
   input(d) {
+    if (this.exited) {
+      if (d.includes("\r")) this.restartShell();
+      return;
+    }
     this.touched = true;
+    this.typed = true;
     if (d.includes("\r")) this.noteEnter();
     if (this.view.broadcast) {
       for (const s of this.view.sessions) {
         s.touched = true;
+        s.typed = true;
         if (s.ptyProc) s.ptyProc.write(d);
         if (s !== this && d.includes("\r")) s.noteEnter();
       }
@@ -1016,11 +1147,10 @@ class TermSession {
       return true;
     });
 
-    let selTimer = null;
     term.onSelectionChange(() => {
       if (!this.plugin.settings.copyOnSelect) return;
-      clearTimeout(selTimer);
-      selTimer = setTimeout(() => {
+      clearTimeout(this.selTimer);
+      this.selTimer = setTimeout(() => {
         if (term.hasSelection()) navigator.clipboard.writeText(term.getSelection()).catch(() => {});
       }, 200);
     });
@@ -1217,11 +1347,13 @@ class TermSession {
 
   state() {
     const st = { cwd: this.cwd || this.restore.cwd || "" };
-    if (this.plugin.settings.persistBuffer && !this.touched && this.savedBuffer) {
+    if (this.plugin.settings.persistBuffer && !this.term && this.restore.buffer) {
+      st.buffer = this.restore.buffer;
+    } else if (this.plugin.settings.persistBuffer && !this.touched && this.savedBuffer) {
       st.buffer = this.savedBuffer;
     } else if (this.plugin.settings.persistBuffer && this.term && this.serialize) {
       try {
-        st.buffer = this.serialize.serialize({ scrollback: 300 });
+        st.buffer = this.serialize.serialize({ scrollback: 300, excludeAltBuffer: true, excludeModes: true });
       } catch (e) {
       }
     }
@@ -1231,6 +1363,9 @@ class TermSession {
   dispose() {
     this.closed = true;
     clearTimeout(this.remoteTimer);
+    clearTimeout(this.selTimer);
+    cancelAnimationFrame(this.raf);
+    this.disposePty();
     try {
       if (this.ro) this.ro.disconnect();
       if (this.ptyProc) this.ptyProc.kill();
@@ -1352,7 +1487,8 @@ class EcuTerminalView extends ItemView {
   }
 
   engineInstalled() {
-    if (!this.started) this.start();
+    if (!this.started) return this.start();
+    for (const s of this.sessions.slice()) s.retryStart();
   }
 
   getState() {
@@ -1879,7 +2015,10 @@ module.exports = class EcuTerminal extends Plugin {
     list.unshift({ cmd, host, cwd: cwd || "", t: Date.now() });
     this.settings.history = list.slice(0, 40);
     clearTimeout(this.histTimer);
-    this.histTimer = setTimeout(() => this.saveData(this.settings), 1500);
+    this.histTimer = setTimeout(() => {
+      this.histTimer = null;
+      this.saveData(this.settings);
+    }, 1500);
     this.app.workspace.trigger("ecu-terminal:history");
   }
 
@@ -1906,6 +2045,11 @@ module.exports = class EcuTerminal extends Plugin {
   }
 
   onunload() {
+    if (this.histTimer) {
+      clearTimeout(this.histTimer);
+      this.histTimer = null;
+      this.saveData(this.settings);
+    }
     this.leaveTermScope();
     document.querySelectorAll("." + HIDDEN).forEach((el) => el.classList.remove(HIDDEN));
     document.querySelectorAll("." + BEFORE_HIDDEN).forEach((el) => el.classList.remove(BEFORE_HIDDEN));
@@ -2317,7 +2461,20 @@ module.exports = class EcuTerminal extends Plugin {
     await this.create();
   }
 
-  async move() {
+  move() {
+    const busy = this.leaves().flatMap((l) => (l.view && l.view.sessions) || []).filter((s) => s.localRun || s.remoteRun);
+    if (!busy.length) return this.moveNow();
+    const names = busy.map((s) => (s.localRun || s.remoteRun).cmd).filter(Boolean).slice(0, 3).join(", ");
+    new ConfirmModal(
+      this.app,
+      t("confirm.moveTitle"),
+      t(busy.length === 1 ? "confirm.moveBusyOne" : "confirm.moveBusyMany", { n: busy.length, names: names ? ` (${names})` : "" }),
+      t("confirm.moveAnyway"),
+      () => this.moveNow()
+    ).open();
+  }
+
+  async moveNow() {
     this.settings.side = this.settings.side === "bottom" ? "right" : "bottom";
     await this.saveData(this.settings);
     const all = this.leaves();
@@ -2577,6 +2734,23 @@ class EcuTerminalSettings extends PluginSettingTab {
         .setName(t("set.startCustom"))
         .addText((t) => t.setPlaceholder("/Users/…").setValue(p.settings.customDir).onChange(async (v) => ((p.settings.customDir = v.trim()), await save())));
     new Setting(containerEl)
+      .setName(t("set.engine"))
+      .setDesc(t("set.engineDesc", { version: PTY_VERSION, platform: PLATFORM_KEY }))
+      .addButton((b) =>
+        b.setButtonText(t("engine.redownload")).onClick(async () => {
+          b.setDisabled(true);
+          b.setButtonText(t("engine.downloading"));
+          try {
+            await p.installEngine();
+            new Notice(t("notice.engineInstalled"));
+          } catch (e) {
+            new Notice(t("engine.downloadFailed", { error: e && e.message ? e.message : e }));
+          }
+          b.setDisabled(false);
+          b.setButtonText(t("engine.redownload"));
+        })
+      );
+    new Setting(containerEl)
       .setName(t("set.persist"))
       .setDesc(t("set.persistDesc"))
       .addToggle((t) => t.setValue(p.settings.persistBuffer).onChange(async (v) => ((p.settings.persistBuffer = v), await save())));
@@ -2632,16 +2806,20 @@ class EcuTerminalSettings extends PluginSettingTab {
       .addToggle((t) => t.setValue(p.settings.optionIsMeta).onChange(async (v) => ((p.settings.optionIsMeta = v), await save(), p.applyToAll())));
     new Setting(containerEl)
       .setName(t("set.scrollback"))
-      .setDesc(note)
-      .addText((t) =>
-        t.setValue(String(p.settings.scrollback)).onChange(async (v) => {
-          const n = parseInt(v, 10);
-          if (n > 0) {
+      .setDesc(`${t("set.scrollbackRange", { min: SCROLLBACK_MIN, max: SCROLLBACK_MAX })} ${note}`)
+      .addText((tx) => {
+        tx.inputEl.type = "number";
+        tx.inputEl.min = String(SCROLLBACK_MIN);
+        tx.inputEl.max = String(SCROLLBACK_MAX);
+        tx.setValue(String(clampScrollback(p.settings.scrollback, DEFAULTS.scrollback))).onChange(async (v) => {
+          const n = clampScrollback(v, null);
+          if (n !== null) {
             p.settings.scrollback = n;
             await save();
           }
-        })
-      );
+        });
+        tx.inputEl.addEventListener("blur", () => tx.setValue(String(clampScrollback(p.settings.scrollback, DEFAULTS.scrollback))));
+      });
 
     containerEl.createEl("p", {
       text:
