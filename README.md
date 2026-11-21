@@ -9,8 +9,8 @@ and node-pty. No other plugins required.
 
 ## Features
 
-- **Docked terminal** at the bottom or right of the workspace. `Cmd/Ctrl+J` shows or hides it,
-  `Cmd/Ctrl+Shift+J` moves it. Hiding does not kill the shell.
+- **Docked terminal** at the bottom or right of the workspace, shown or hidden with one command
+  (bind it to `Cmd/Ctrl+J`). Hiding does not kill the shell.
 - **Terminal Panel**: a full-size pinned tab used only as a terminal screen. Open it by
   right-clicking the terminal icon in the file explorer's toolbar, or from the command palette.
 - **Split grid** (MobaXterm style): add terminals to a grid. Auto grid, side-by-side or stacked
@@ -38,32 +38,36 @@ and node-pty. No other plugins required.
 | Windows 10 1809+ / 11 | x64, arm64 | PowerShell 7 if installed, else Windows PowerShell | Not tested yet |
 | Linux | x64 (glibc 2.28+), arm64 (glibc 2.34+) | `$SHELL` (usually bash) | Not tested yet |
 
-node-pty ships as prebuilt N-API binaries for all of these, so there is no build step and
-Obsidian updates don't need a rebuild. Any other shell can be set in the settings.
-If you run Windows or Linux, issue reports are very welcome.
+Any other shell can be set in the settings. If you run Windows or Linux, issue reports are
+very welcome.
 
 On Linux, the Flatpak and Snap builds of Obsidian run in a sandbox, so the terminal sees the
 sandbox, not your full system. The AppImage or .deb build behaves like a normal terminal.
 
 ## Install
 
-1. Download or clone this repository into `<your vault>/.obsidian/plugins/ecu-terminal`:
+Desktop only.
 
-   ```sh
-   cd "<your vault>/.obsidian/plugins"
-   git clone https://github.com/erencanucarr/ecu-terminal.git
-   ```
-
-   The folder must contain `main.js`, `styles.css`, `manifest.json` and `vendor/`.
+1. From the [latest release](https://github.com/erencanucarr/ecu-terminal/releases/latest),
+   download `main.js`, `manifest.json` and `styles.css` into
+   `<your vault>/.obsidian/plugins/ecu-terminal/`.
 2. In Obsidian, open **Settings > Community plugins**, turn off Restricted mode if needed,
    and enable **ecu-terminal**.
-3. Press `Cmd+J` (macOS) or `Ctrl+J` (Windows, Linux).
+3. Run **ecu-terminal: Show / hide terminal** from the command palette. Give it a hotkey under
+   **Settings > Hotkeys** if you like (`Cmd/Ctrl+J` works well); the plugin sets none by default.
 
-If macOS blocks the native module after a download, clear the quarantine flag:
+### Terminal engine (one-time download)
 
-```sh
-xattr -dr com.apple.quarantine "<your vault>/.obsidian/plugins/ecu-terminal"
-```
+The shell runs through [node-pty](https://github.com/microsoft/node-pty), a native module that
+differs per operating system and can't be shipped through the plugin directory. The first time
+you open a terminal, the plugin asks before downloading the engine for your platform
+(about 25 KB on macOS/Linux, 600 KB on Windows) from this repository's
+[`node-pty-1.1.0` release](https://github.com/erencanucarr/ecu-terminal/releases/tag/node-pty-1.1.0).
+The file is checked against a SHA-256 hash built into the plugin before it is unpacked into the
+plugin folder. This is the only network request the plugin makes.
+
+The archives are made from the official `node-pty` 1.1.0 npm package (macOS, Windows) and
+`@lydell/node-pty-linux-*` 1.1.0 (Linux) by [`scripts/pack-node-pty.sh`](scripts/pack-node-pty.sh).
 
 ## Keyboard shortcuts
 
@@ -72,8 +76,6 @@ On Windows and Linux, plain `Ctrl` keys inside a terminal go to the shell (`Ctrl
 
 | macOS | Windows / Linux | Action |
 | --- | --- | --- |
-| `Cmd+J` | `Ctrl+J` | Show / hide the docked terminal |
-| `Cmd+Shift+J` | `Ctrl+Shift+J` | Move the docked terminal (bottom / right) |
 | `Cmd+D` | `Ctrl+Shift+D` | New terminal in the grid |
 | `Option+Cmd+Arrow` | `Alt+Arrow` | Move focus to the neighboring pane |
 | `Cmd+C` / `Cmd+V` | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste (on Windows also `Ctrl+V`, and `Ctrl+C` with a selection) |
@@ -83,15 +85,23 @@ On Windows and Linux, plain `Ctrl` keys inside a terminal go to the shell (`Ctrl
 | `Ctrl+D` / `exit` | `Ctrl+D` / `exit` | Close the current terminal |
 
 Every action is also available in the command palette and in the terminal's right-click menu.
-The show/hide and move hotkeys can be changed under **Settings > Hotkeys**.
 
 ## Language
 
-The user interface (menus, notices, settings) is in Turkish.
+The interface is available in English and Turkish. By default it follows Obsidian's language;
+you can pick one under **Settings > ecu-terminal > Language**.
+
+## Building from source
+
+```sh
+npm install
+npm run build          # writes main.js and styles.css
+npm run pack-node-pty  # writes the engine archives and SHA256SUMS to dist/
+```
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Bundled third-party code in `vendor/`, all MIT, with license files
-included: [xterm.js](https://github.com/xtermjs/xterm.js) and
-[node-pty](https://github.com/microsoft/node-pty) 1.1.0. The Linux node-pty binaries come from
-[@lydell/node-pty](https://github.com/lydell/node-pty), prebuilt from the same node-pty release.
+MIT, see [LICENSE](LICENSE). Bundled into `main.js`: [xterm.js](https://github.com/xtermjs/xterm.js)
+6.0.0 and its addons (MIT). Downloaded on first use: [node-pty](https://github.com/microsoft/node-pty)
+1.1.0 (MIT); the Linux binaries come from [@lydell/node-pty](https://github.com/lydell/node-pty),
+prebuilt from the same node-pty release.

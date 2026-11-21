@@ -1,4 +1,306 @@
-const { Plugin, ItemView, Modal, PluginSettingTab, Setting, MarkdownView, Notice, Menu, FileSystemAdapter, Scope, setIcon } = require("obsidian");
+const { Plugin, ItemView, Modal, PluginSettingTab, Setting, MarkdownView, Notice, Menu, FileSystemAdapter, Scope, setIcon, requestUrl } = require("obsidian");
+const { Terminal } = require("@xterm/xterm");
+const { FitAddon } = require("@xterm/addon-fit");
+const { WebLinksAddon } = require("@xterm/addon-web-links");
+const { SerializeAddon } = require("@xterm/addon-serialize");
+const { SearchAddon } = require("@xterm/addon-search");
+const { Unicode11Addon } = require("@xterm/addon-unicode11");
+
+const STRINGS = {
+  en: {
+    "common.language": "Language",
+    "set.uiLangDesc": "Plugin interface language. Auto follows Obsidian's language.",
+    "set.uiLangAuto": "Auto (follow Obsidian)",
+    "set.uiLangEn": "English",
+    "set.uiLangTr": "Türkçe",
+    "notice.langChanged": "Language changed. Reload Obsidian to apply it everywhere.",
+    "capture.noOutput": "(no output)",
+    "engine.unsupported": "This platform is not supported: {platform}",
+    "engine.badHash": "Couldn't verify the downloaded file (SHA-256 mismatch).",
+    "engine.notInstalled": "node-pty is not installed",
+    "engine.title": "Terminal engine required",
+    "engine.text": "ecu-terminal uses node-pty {version} ({platform}) to run the shell. It's downloaded once, from the github.com/erencanucarr/ecu-terminal releases, and verified with SHA-256.",
+    "engine.download": "Download and start",
+    "engine.downloading": "Downloading…",
+    "engine.downloadFailed": "Download failed: {error}",
+    "dur.s": "{s} s",
+    "dur.ms": "{m} min {s} s",
+    "dur.hm": "{h} h {m} min",
+    "session.startFailed": "Couldn't start the terminal: {error}",
+    "session.restarted": "── session restarted ──",
+    "session.shellFailed": "Couldn't start the shell ({shell}): {error}",
+    "search.placeholder": "Search the terminal…",
+    "search.notFound": "not found",
+    "search.prev": "Previous (⇧↵)",
+    "search.next": "Next (↵)",
+    "search.close": "Close (esc)",
+    "layout.auto": "Auto grid",
+    "layout.cols": "Side by side",
+    "layout.rows": "Stacked",
+    "layout.equalize": "Equalize sizes",
+    "common.cancel": "Cancel",
+    "view.terminal": "Terminal",
+    "view.panel": "Terminal Panel",
+    "toolbar.new": "New terminal ({key})",
+    "toolbar.layout": "Layout",
+    "toolbar.close": "Close terminals",
+    "toolbar.hide": "Hide terminal ({key})",
+    "toolbar.sessions": "Terminal  ·  {n} sessions",
+    "tile.new": "New terminal",
+    "common.broadcast": "Type into all terminals (MultiExec)",
+    "confirm.closeOthersTitle": "Close the other terminals?",
+    "confirm.closeAllTitle": "Close all terminals?",
+    "confirm.busyOne": "A command is still running in {n} terminal{names}. Closing it will stop the command.",
+    "confirm.busyMany": "Commands are still running in {n} terminals{names}. Closing them will stop these commands.",
+    "confirm.closeAnyway": "Close anyway",
+    "common.closeThis": "Close this terminal",
+    "common.closeOthers": "Close other terminals",
+    "common.closeAllN": "Close all terminals ({n})",
+    "notice.broadcastOn": "MultiExec on: everything you type goes to every terminal in this panel.",
+    "notice.broadcastOff": "MultiExec off.",
+    "cmd.toggle": "Show / hide terminal",
+    "cmd.splitRight": "New terminal beside",
+    "cmd.splitDown": "New terminal below",
+    "cmd.restart": "Restart terminal (new shell)",
+    "cmd.move": "Move terminal (right / bottom)",
+    "cmd.openPanel": "Open Terminal Panel (full-screen tab)",
+    "cmd.openHere": "Open terminal in the current note's folder",
+    "cmd.closeAll": "Close all terminals",
+    "common.captureLast": "Add last command and its output to note",
+    "cmd.captureSelection": "Add selected terminal text to note",
+    "menu.vaultFolder": "vault folder",
+    "menu.openHere": "Open terminal here ({name})",
+    "menu.openInNoteFolder": "Open terminal in this note's folder",
+    "nav.button": "Terminal (right-click: Terminal Panel)",
+    "nav.panel": "Terminal Panel (full-screen tab)",
+    "menu.newKey": "New terminal  {key}",
+    "nav.hideKey": "Hide terminal  {key}",
+    "nav.showKey": "Show terminal  {key}",
+    "nav.newInVault": "New terminal in vault folder",
+    "common.moveBottom": "Move to bottom",
+    "common.moveRight": "Move to right",
+    "nav.settings": "Terminal settings",
+    "notify.failed": "✗ Command failed (code {code})",
+    "notify.doneOk": "✓ Command finished",
+    "notify.done": "Command finished",
+    "notify.cmdFallback": "command",
+    "notice.movedBottom": "Terminal: bottom",
+    "notice.movedRight": "Terminal: right",
+    "notice.noTerminal": "No open terminal.",
+    "notice.noNote": "Open the note to add the output to first.",
+    "notice.noSelection": "Select something in the terminal first.",
+    "notice.noLastCmd": "Couldn't find the last command. Select the output and use 'Add selection to note'.",
+    "notice.nothing": "Nothing to add.",
+    "notice.added": "Added to note: {name}",
+    "menu.copy": "Copy",
+    "menu.paste": "Paste",
+    "menu.selectAll": "Select all",
+    "menu.noteFallback": "note",
+    "menu.captureSelection": "Add selection to note",
+    "menu.clear": "Clear screen",
+    "menu.layout": "Layout…",
+    "menu.hide": "Hide terminal",
+    "set.side": "Terminal position",
+    "set.sideDesc": "Where a newly opened terminal sits next to the note.",
+    "set.sideRight": "Right",
+    "set.sideBottom": "Bottom",
+    "set.size": "Terminal size (%)",
+    "set.sizeDesc": "Space a newly opened terminal takes up.",
+    "set.notePlace": "Where terminal output goes in the note",
+    "set.notePlaceDesc": "Right-click → 'Add last command and its output to note' / 'Add selection to note'. The output is added to the note you used last, with the time.",
+    "set.placeCursor": "At the cursor",
+    "set.placeEnd": "At the end of the note",
+    "set.newOnly": "Applies to newly opened terminals.",
+    "set.shell": "Shell",
+    "set.shellDesc": "Leave empty to use the system default ({shell}). Command boundaries are known exactly in zsh, bash and PowerShell.",
+    "set.startDir": "Start folder",
+    "set.startVault": "Vault folder (notes)",
+    "set.startHome": "Home folder (~)",
+    "set.startCustom": "Custom folder",
+    "set.persist": "Remember session",
+    "set.persistDesc": "When Obsidian reopens, the terminal starts in the same folder and the previous screen content is shown (the shell restarts).",
+    "set.hNotify": "Notify when a command finishes",
+    "set.notify": "Send notification",
+    "set.notifyDesc": "Tells you when a long-running command finishes: exit code (✓/✗), duration, and the server name if you're in ssh. Inside ssh, a command counts as finished when the prompt comes back.",
+    "set.notifyAfter": "Minimum duration (seconds)",
+    "set.notifyAfterDesc": "No notification for commands shorter than this.",
+    "set.notifyMode": "When",
+    "set.notifyAway": "When Obsidian is in the background or the terminal isn't visible",
+    "set.notifyAlways": "Always",
+    "set.sound": "Sound",
+    "set.hLook": "Appearance and behavior",
+    "set.font": "Font",
+    "set.fontSize": "Font size",
+    "set.cursor": "Cursor",
+    "set.cursorBlock": "Block",
+    "set.cursorBar": "Bar",
+    "set.cursorUnderline": "Underline",
+    "set.cursorBlink": "Blink",
+    "set.copyOnSelect": "Copy on select",
+    "set.copyOnSelectDesc": "Text you select with the mouse is copied to the clipboard automatically.",
+    "set.optionMeta": "Use Option as Meta",
+    "set.optionMetaDesc": "When off, Option types special/accented characters and ⌥←/→ jumps by word. When on, Option acts as an emacs-style Meta key.",
+    "set.scrollback": "Scrollback lines",
+    "set.helpMac": "Cmd+J show/hide, Cmd+Shift+J move between right/bottom. Cmd+D new terminal (added to the grid), ⌥⌘+arrow switch between terminals, Ctrl-D closes that terminal. Drag the dividers to resize, double-click to equalize. ⌘F search, ⌘K clear screen, ⌘+click opens a link. ⌥←/→ word, ⌘←/→ start/end of line, ⌘⌫ deletes the line. Right-click for the menu.",
+    "set.helpOther": "Ctrl+J show/hide, Ctrl+Shift+J move between right/bottom. Ctrl+Shift+D new terminal (added to the grid), Alt+arrow switch between terminals. Ctrl+Shift+C copy, {paste} paste, Ctrl+Shift+F search, Ctrl+Shift+K clear screen, Ctrl+Shift+P command palette. While the terminal has focus, other Ctrl keys go to the shell. Ctrl+click opens a link. Right-click for the menu.",
+  },
+  tr: {
+    "common.language": "Dil",
+    "set.uiLangDesc": "Eklentinin arayüz dili. Otomatik, Obsidian'ın diline uyar.",
+    "set.uiLangAuto": "Otomatik (Obsidian'a göre)",
+    "set.uiLangEn": "English",
+    "set.uiLangTr": "Türkçe",
+    "notice.langChanged": "Dil değişti. Her yerde uygulanması için Obsidian'ı yeniden yükle.",
+    "capture.noOutput": "(çıktı yok)",
+    "engine.unsupported": "Bu platform desteklenmiyor: {platform}",
+    "engine.badHash": "İndirilen dosya doğrulanamadı (SHA-256 uyuşmuyor).",
+    "engine.notInstalled": "node-pty yüklü değil",
+    "engine.title": "Terminal motoru gerekli",
+    "engine.text": "ecu-terminal, kabuğu çalıştırmak için node-pty {version} ({platform}) kullanır. Bir kerelik indirilir: github.com/erencanucarr/ecu-terminal sürümlerinden gelir ve SHA-256 ile doğrulanır.",
+    "engine.download": "İndir ve başlat",
+    "engine.downloading": "İndiriliyor…",
+    "engine.downloadFailed": "İndirilemedi: {error}",
+    "dur.s": "{s} sn",
+    "dur.ms": "{m} dk {s} sn",
+    "dur.hm": "{h} sa {m} dk",
+    "session.startFailed": "Terminal başlatılamadı: {error}",
+    "session.restarted": "── oturum yeniden başlatıldı ──",
+    "session.shellFailed": "Shell başlatılamadı ({shell}): {error}",
+    "search.placeholder": "Terminalde ara…",
+    "search.notFound": "bulunamadı",
+    "search.prev": "Önceki (⇧↵)",
+    "search.next": "Sonraki (↵)",
+    "search.close": "Kapat (esc)",
+    "layout.auto": "Otomatik ızgara",
+    "layout.cols": "Yan yana",
+    "layout.rows": "Alt alta",
+    "layout.equalize": "Boyutları eşitle",
+    "common.cancel": "Vazgeç",
+    "view.terminal": "Terminal",
+    "view.panel": "Terminal Paneli",
+    "toolbar.new": "Yeni terminal ({key})",
+    "toolbar.layout": "Düzen",
+    "toolbar.close": "Terminalleri kapat",
+    "toolbar.hide": "Terminali gizle ({key})",
+    "toolbar.sessions": "Terminal  ·  {n} oturum",
+    "tile.new": "Yeni terminal",
+    "common.broadcast": "Tüm terminallere yaz (MultiExec)",
+    "confirm.closeOthersTitle": "Diğer terminaller kapatılsın mı?",
+    "confirm.closeAllTitle": "Tüm terminaller kapatılsın mı?",
+    "confirm.busyOne": "{n} terminalde hâlâ çalışan bir komut var{names}. Kapatırsan bu komutlar durdurulur.",
+    "confirm.busyMany": "{n} terminalde hâlâ çalışan bir komut var{names}. Kapatırsan bu komutlar durdurulur.",
+    "confirm.closeAnyway": "Yine de kapat",
+    "common.closeThis": "Bu terminali kapat",
+    "common.closeOthers": "Diğer terminalleri kapat",
+    "common.closeAllN": "Tüm terminalleri kapat ({n})",
+    "notice.broadcastOn": "MultiExec açık: yazdığın her şey bu paneldeki tüm terminallere gidiyor.",
+    "notice.broadcastOff": "MultiExec kapalı.",
+    "cmd.toggle": "Terminali göster / gizle",
+    "cmd.splitRight": "Yana yeni terminal",
+    "cmd.splitDown": "Alta yeni terminal",
+    "cmd.restart": "Terminali yeniden başlat (yeni shell)",
+    "cmd.move": "Terminali taşı (sağ / alt)",
+    "cmd.openPanel": "Terminal Panelini aç (tam ekran sekme)",
+    "cmd.openHere": "Terminali açık notun klasöründe aç",
+    "cmd.closeAll": "Tüm terminalleri kapat",
+    "common.captureLast": "Son komutu ve çıktısını nota ekle",
+    "cmd.captureSelection": "Terminalde seçili metni nota ekle",
+    "menu.vaultFolder": "kasa klasörü",
+    "menu.openHere": "Terminali burada aç ({name})",
+    "menu.openInNoteFolder": "Terminali bu notun klasöründe aç",
+    "nav.button": "Terminal (sağ tık: Terminal Paneli)",
+    "nav.panel": "Terminal Paneli (tam ekran sekme)",
+    "menu.newKey": "Yeni terminal  {key}",
+    "nav.hideKey": "Terminali gizle  {key}",
+    "nav.showKey": "Terminali göster  {key}",
+    "nav.newInVault": "Kasa klasöründe yeni terminal",
+    "common.moveBottom": "Alta taşı",
+    "common.moveRight": "Sağa taşı",
+    "nav.settings": "Terminal ayarları",
+    "notify.failed": "✗ Komut hata verdi (kod {code})",
+    "notify.doneOk": "✓ Komut bitti",
+    "notify.done": "Komut bitti",
+    "notify.cmdFallback": "komut",
+    "notice.movedBottom": "Terminal: altta",
+    "notice.movedRight": "Terminal: sağda",
+    "notice.noTerminal": "Açık terminal yok.",
+    "notice.noNote": "Önce çıktının ekleneceği notu aç.",
+    "notice.noSelection": "Terminalde önce bir şey seç.",
+    "notice.noLastCmd": "Son komut bulunamadı. Çıktıyı seçip 'Seçimi nota ekle'yi kullan.",
+    "notice.nothing": "Eklenecek bir şey yok.",
+    "notice.added": "Nota eklendi: {name}",
+    "menu.copy": "Kopyala",
+    "menu.paste": "Yapıştır",
+    "menu.selectAll": "Tümünü seç",
+    "menu.noteFallback": "not",
+    "menu.captureSelection": "Seçimi nota ekle",
+    "menu.clear": "Ekranı temizle",
+    "menu.layout": "Düzen…",
+    "menu.hide": "Terminali gizle",
+    "set.side": "Terminal konumu",
+    "set.sideDesc": "Yeni açılan terminal notun neresinde dursun.",
+    "set.sideRight": "Sağda",
+    "set.sideBottom": "Altta",
+    "set.size": "Terminal boyutu (%)",
+    "set.sizeDesc": "Yeni açılan terminalin kapladığı alan.",
+    "set.notePlace": "Terminal çıktısı nota nereye eklensin",
+    "set.notePlaceDesc": "Sağ tık → 'Son komutu ve çıktısını nota ekle' / 'Seçimi nota ekle'. Çıktı en son kullandığın nota, saatiyle birlikte eklenir.",
+    "set.placeCursor": "İmlecin olduğu yere",
+    "set.placeEnd": "Notun sonuna",
+    "set.newOnly": "Yeni açılan terminallerde geçerli olur.",
+    "set.shell": "Shell",
+    "set.shellDesc": "Boş bırakırsan sistemdeki varsayılan kullanılır ({shell}). zsh, bash ve PowerShell'de komut sınırları kesin bilinir.",
+    "set.startDir": "Başlangıç klasörü",
+    "set.startVault": "Kasa klasörü (notlar)",
+    "set.startHome": "Ev klasörü (~)",
+    "set.startCustom": "Özel klasör",
+    "set.persist": "Oturumu hatırla",
+    "set.persistDesc": "Obsidian yeniden açılınca terminal aynı klasörde başlar ve önceki ekran içeriği görünür (shell yeniden başlar).",
+    "set.hNotify": "Komut bitince bildirim",
+    "set.notify": "Bildirim gönder",
+    "set.notifyDesc": "Uzun süren bir komut bitince haber verir: çıkış kodu (✓/✗), süre ve ssh'teysen sunucu adıyla. ssh içindeki komutların bitişi prompt'un geri gelmesinden anlaşılır.",
+    "set.notifyAfter": "En az süre (saniye)",
+    "set.notifyAfterDesc": "Bundan kısa süren komutlar için bildirim gelmez.",
+    "set.notifyMode": "Ne zaman",
+    "set.notifyAway": "Obsidian arka plandayken ya da terminal görünmüyorken",
+    "set.notifyAlways": "Her zaman",
+    "set.sound": "Ses",
+    "set.hLook": "Görünüm ve davranış",
+    "set.font": "Yazı tipi",
+    "set.fontSize": "Yazı boyutu",
+    "set.cursor": "İmleç",
+    "set.cursorBlock": "Blok",
+    "set.cursorBar": "Çizgi",
+    "set.cursorUnderline": "Alt çizgi",
+    "set.cursorBlink": "Yanıp sönsün",
+    "set.copyOnSelect": "Seçince kopyala",
+    "set.copyOnSelectDesc": "Fareyle seçtiğin metin otomatik panoya kopyalanır.",
+    "set.optionMeta": "Option tuşu Meta gibi davransın",
+    "set.optionMetaDesc": "Kapalıyken Option ile Türkçe/özel karakter yazılır ve ⌥←/→ kelime atlar. Açıkken Option, emacs tarzı Meta tuşu olur.",
+    "set.scrollback": "Geçmiş satır sayısı",
+    "set.helpMac": "Cmd+J göster/gizle, Cmd+Shift+J sağ/alt arasında taşı. Cmd+D yeni terminal (ızgaraya eklenir), ⌥⌘+ok terminaller arası geçiş, Ctrl-D o terminali kapatır. Ayraçları sürükleyerek boyutlandır, çift tıkla eşitle. ⌘F ara, ⌘K ekranı temizle, ⌘+tık bağlantıyı açar. ⌥←/→ kelime, ⌘←/→ satır başı/sonu, ⌘⌫ satırı siler. Sağ tıkla menü.",
+    "set.helpOther": "Ctrl+J göster/gizle, Ctrl+Shift+J sağ/alt arasında taşı. Ctrl+Shift+D yeni terminal (ızgaraya eklenir), Alt+ok terminaller arası geçiş. Ctrl+Shift+C kopyala, {paste} yapıştır, Ctrl+Shift+F ara, Ctrl+Shift+K ekranı temizle, Ctrl+Shift+P komut paleti. Terminal odaktayken diğer Ctrl tuşları kabuğa gider. Ctrl+tık bağlantıyı açar. Sağ tıkla menü.",
+  },
+};
+let uiLang = "en";
+function t(key, vars) {
+  const s = (STRINGS[uiLang] && STRINGS[uiLang][key]) || STRINGS.en[key] || key;
+  return vars ? s.replace(/\{(\w+)\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m)) : s;
+}
+function resolveUiLang(pref) {
+  if (pref === "en" || pref === "tr") return pref;
+  let code = "";
+  try {
+    code = (window.localStorage && window.localStorage.getItem("language")) || "";
+  } catch (e) {
+    code = "";
+  }
+  return /^tr/i.test(code) ? "tr" : "en";
+}
+function setUiLang(pref) {
+  uiLang = resolveUiLang(pref);
+  return uiLang;
+}
 
 const nodeRequire = window.require;
 const path = nodeRequire("path");
@@ -38,6 +340,7 @@ const VIEW = "ecu-terminal-view";
 const LEGACY_VIEW = "terminal-view";
 const HIDDEN = "qt-hidden";
 const DEFAULTS = {
+  uiLang: "auto",
   side: "bottom",
   size: 40,
   hidden: false,
@@ -60,7 +363,11 @@ const DEFAULTS = {
   notifyAfter: 10,
   notifyMode: "away",
   notifySound: true,
+  history: [],
 };
+
+const SECRET_RE = /passw(or)?d|passwd|secret|token|api[-_]?key|bearer|credential/i;
+const TRIVIAL_RE = /^(exit|logout|clear|reset|ls|ll|la|pwd|cd|cd \S+|history|q|:q)$/;
 
 const PROMPT_RE = /^(?:\([^)\n]{1,40}\)\s*)?(?:\[[^\]\n]{1,80}\]\s?[$#%]|[\w.-]+@[\w.-]+[^\n$#%]{0,80}?[$#%]|\S{0,40}\s?[❯➜]|(?:PS )?[A-Za-z]:\\[^>\n]{0,160}>)\s/;
 
@@ -145,31 +452,86 @@ function formatCapture(cap, opts) {
   let head = `**${time}**`;
   if (host) head += ` · ${host}`;
   if (cap.cmd) head += " — `" + cap.cmd.replace(/`/g, "'") + "`";
-  const out = cap.output || "(çıktı yok)";
+  const out = cap.output || t("capture.noOutput");
   const fence = fenceFor(out);
   return `${head}\n${fence}text\n${out}\n${fence}`;
+}
+
+const PTY_VERSION = "1.1.0";
+const PTY_RELEASE_URL = "https://github.com/erencanucarr/ecu-terminal/releases/download/node-pty-" + PTY_VERSION;
+const PTY_SHA256 = {
+  "darwin-arm64": "c32d517b10189c762e829bf6d343ef57294fcaefb32761a611d2ccd05678562d",
+  "darwin-x64": "9eb69ad5b64c85d187a301062fdfad8b50442306b283ac6940cf8cf66e43fdd3",
+  "linux-arm64": "b6c11247e95ab47bc801b1136f271a5c9d63f4502827be77db3a206dbcfb048a",
+  "linux-x64": "7e7f7ab98a3c545e596691eb18a4cd5447b223148a7df7337d8e7ae3fce3f75c",
+  "win32-arm64": "8bd3700ac6ffe0e70d0fcffca2dd7537b4a2d0f5c66773e0b5b64ac5bdd343b7",
+  "win32-x64": "d868c695cb8bd310b9c3fe857f45ef481a920dbe48ac20f5879df0031691078c",
+};
+const PLATFORM_KEY = process.platform + "-" + process.arch;
+
+function ptyDir(dir) {
+  for (const d of [path.join(dir, "node-pty"), path.join(dir, "vendor", "node-pty")]) {
+    try {
+      if (fs.existsSync(path.join(d, "package.json")) && fs.existsSync(path.join(d, "prebuilds", PLATFORM_KEY))) return d;
+    } catch (e) {}
+  }
+  return null;
+}
+
+function untar(buf, dest) {
+  const root = path.resolve(dest);
+  let off = 0;
+  const str = (a, b) => buf.toString("utf8", off + a, off + b).replace(/\0.*$/s, "");
+  while (off + 512 <= buf.length) {
+    if (buf.readUInt32BE(off) === 0 && buf.readUInt32BE(off + 4) === 0) break;
+    const name = str(0, 100);
+    const mode = parseInt(str(100, 108).trim() || "644", 8);
+    const size = parseInt(str(124, 136).trim() || "0", 8);
+    const type = String.fromCharCode(buf[off + 156] || 48);
+    const prefix = str(345, 500);
+    const rel = (prefix ? prefix + "/" : "") + name;
+    const target = path.resolve(root, rel);
+    if (target !== root && !target.startsWith(root + path.sep)) throw new Error("unsafe path in archive: " + rel);
+    off += 512;
+    if (type === "5") fs.mkdirSync(target, { recursive: true });
+    else if (type === "0" || type === "\0") {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, buf.subarray(off, off + size));
+      if (process.platform !== "win32") fs.chmodSync(target, mode & 0o755);
+    }
+    off += Math.ceil(size / 512) * 512;
+  }
+}
+
+async function installEngine(dir) {
+  const sha = PTY_SHA256[PLATFORM_KEY];
+  if (!sha) throw new Error(t("engine.unsupported", { platform: PLATFORM_KEY }));
+  const res = await requestUrl({ url: `${PTY_RELEASE_URL}/node-pty-${PLATFORM_KEY}.tar.gz`, method: "GET" });
+  const Buf = nodeRequire("buffer").Buffer;
+  const gz = Buf.from(res.arrayBuffer);
+  const got = nodeRequire("crypto").createHash("sha256").update(gz).digest("hex");
+  if (got !== sha) throw new Error(t("engine.badHash"));
+  const tmp = path.join(dir, ".node-pty-download");
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
+  untar(nodeRequire("zlib").gunzipSync(gz), tmp);
+  const final = path.join(dir, "node-pty");
+  fs.rmSync(final, { recursive: true, force: true });
+  fs.renameSync(path.join(tmp, "node-pty"), final);
+  fs.rmSync(tmp, { recursive: true, force: true });
 }
 
 let ENGINE = null;
 function loadEngine(dir) {
   if (ENGINE) return ENGINE;
-  const v = (p) => path.join(dir, "vendor", p);
-  for (const arch of ["darwin-arm64", "darwin-x64"]) {
+  const pdir = ptyDir(dir);
+  if (!pdir) throw new Error(t("engine.notInstalled"));
+  if (process.platform === "darwin") {
     try {
-      fs.chmodSync(v(`node-pty/prebuilds/${arch}/spawn-helper`), 0o755);
-    } catch (e) {
-    }
+      fs.chmodSync(path.join(pdir, "prebuilds", PLATFORM_KEY, "spawn-helper"), 0o755);
+    } catch (e) {}
   }
-  ENGINE = {
-    pty: nodeRequire(v("node-pty")),
-    Terminal: nodeRequire(v("xterm/xterm.js")).Terminal,
-    FitAddon: nodeRequire(v("xterm/addon-fit.js")).FitAddon,
-    WebLinksAddon: nodeRequire(v("xterm/addon-web-links.js")).WebLinksAddon,
-    SerializeAddon: nodeRequire(v("xterm/addon-serialize.js")).SerializeAddon,
-    SearchAddon: nodeRequire(v("xterm/addon-search.js")).SearchAddon,
-    Unicode11Addon: nodeRequire(v("xterm/addon-unicode11.js")).Unicode11Addon,
-    css: fs.readFileSync(v("xterm/xterm.css"), "utf8"),
-  };
+  ENGINE = { pty: nodeRequire(pdir), Terminal, FitAddon, WebLinksAddon, SerializeAddon, SearchAddon, Unicode11Addon };
   return ENGINE;
 }
 
@@ -310,8 +672,8 @@ function writeShellIntegration(dir) {
 }
 
 function cssColor(probe, expr, fallback) {
-  probe.style.color = "";
-  probe.style.color = expr;
+  probe.setCssStyles({ color: "" });
+  probe.setCssStyles({ color: expr });
   const c = getComputedStyle(probe).color;
   return c && c !== "rgba(0, 0, 0, 0)" ? c : fallback;
 }
@@ -359,10 +721,10 @@ const READLINE_KEYS = {
 
 function fmtDuration(ms) {
   const s = Math.round(ms / 1000);
-  if (s < 60) return `${s} sn`;
+  if (s < 60) return t("dur.s", { s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} dk ${s % 60} sn`;
-  return `${Math.floor(m / 60)} sa ${m % 60} dk`;
+  if (m < 60) return t("dur.ms", { m, s: s % 60 });
+  return t("dur.hm", { h: Math.floor(m / 60), m: m % 60 });
 }
 
 class TermSession {
@@ -384,7 +746,7 @@ class TermSession {
     this.el = createDiv({ cls: "ecu-pane" });
     const head = this.el.createDiv({ cls: "ecu-pane-head" });
     this.captionEl = head.createSpan({ cls: "ecu-pane-caption" });
-    const close = head.createEl("button", { cls: "ecu-pane-close clickable-icon", attr: { "aria-label": "Bu terminali kapat" } });
+    const close = head.createEl("button", { cls: "ecu-pane-close clickable-icon", attr: { "aria-label": t("common.closeThis") } });
     setIcon(close, "x");
     close.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -422,7 +784,7 @@ class TermSession {
       E = this.plugin.engine();
     } catch (e) {
       console.error("[ecu-terminal] terminal motoru yüklenemedi", e);
-      this.hostEl.setText("Terminal başlatılamadı: " + (e && e.message ? e.message : e));
+      this.hostEl.setText(t("session.startFailed", { error: e && e.message ? e.message : e }));
       return;
     }
     const s = this.plugin.settings;
@@ -457,7 +819,7 @@ class TermSession {
     }
     term.open(this.hostEl);
     if (this.restore.buffer) {
-      term.write(this.restore.buffer.replace(/\s+$/, "") + "\r\n\x1b[2m── oturum yeniden başlatıldı ──\x1b[0m\r\n");
+      term.write(this.restore.buffer.replace(/\s+$/, "") + "\r\n\x1b[2m" + t("session.restarted") + "\x1b[0m\r\n");
     }
     this.installHandlers();
     this.fitNow();
@@ -478,7 +840,7 @@ class TermSession {
     try {
       p = E.pty.spawn(shell, args, { name: "xterm-256color", cols: term.cols, rows: term.rows, cwd: this.cwd, env });
     } catch (e) {
-      term.write(`\r\n\x1b[31mShell başlatılamadı (${shell}): ${e && e.message ? e.message : e}\x1b[0m\r\n`);
+      term.write(`\r\n\x1b[31m${t("session.shellFailed", { shell, error: e && e.message ? e.message : e })}\x1b[0m\r\n`);
       return;
     }
     this.ptyProc = p;
@@ -512,7 +874,10 @@ class TermSession {
     const b = this.term.buffer.active;
     const line = b.getLine(b.baseY + b.cursorY);
     const p = splitPrompt(line ? line.translateToString(true) : "");
-    if (p && p.cmd) this.remoteRun = { cmd: p.cmd, prompt: p.prompt, t: Date.now() };
+    if (p && p.cmd) {
+      this.remoteRun = { cmd: p.cmd, prompt: p.prompt, t: Date.now() };
+      this.plugin.recordCommand(p.cmd, hostOf(p.prompt), "");
+    }
   }
 
   checkRemoteDone() {
@@ -539,6 +904,7 @@ class TermSession {
       else if (kind === "B") {
         this.commands.push({ cmd: this.pendingCmd, start: term.registerMarker(0), end: null, exit: null });
         this.localRun = { cmd: this.pendingCmd, t: Date.now() };
+        this.plugin.recordCommand(this.pendingCmd, "", this.cwd);
         this.remoteRun = null;
         this.pendingCmd = "";
         if (this.commands.length > 30) {
@@ -741,7 +1107,7 @@ class TermSession {
       return;
     }
     const bar = this.el.createDiv({ cls: "ecu-term-search" });
-    const input = bar.createEl("input", { type: "text", attr: { placeholder: "Terminalde ara…" } });
+    const input = bar.createEl("input", { type: "text", attr: { placeholder: t("search.placeholder") } });
     const info = bar.createSpan({ cls: "ecu-term-search-info" });
     const btn = (icon, label, fn) => {
       const b = bar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": label } });
@@ -752,11 +1118,11 @@ class TermSession {
       const q = input.value;
       if (!q) return;
       const ok = back ? this.search.findPrevious(q) : this.search.findNext(q);
-      info.setText(ok ? "" : "bulunamadı");
+      info.setText(ok ? "" : t("search.notFound"));
     };
-    btn("arrow-up", "Önceki (⇧↵)", () => find(true));
-    btn("arrow-down", "Sonraki (↵)", () => find(false));
-    btn("x", "Kapat (esc)", () => this.closeSearch());
+    btn("arrow-up", t("search.prev"), () => find(true));
+    btn("arrow-down", t("search.next"), () => find(false));
+    btn("x", t("search.close"), () => this.closeSearch());
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter") {
@@ -849,7 +1215,17 @@ class TermSession {
   }
 }
 
-const LAYOUTS = { auto: "Otomatik ızgara", cols: "Yan yana", rows: "Alt alta" };
+const LAYOUTS = {
+  get auto() {
+    return t("layout.auto");
+  },
+  get cols() {
+    return t("layout.cols");
+  },
+  get rows() {
+    return t("layout.rows");
+  },
+};
 
 class ConfirmModal extends Modal {
   constructor(app, title, body, okText, onOk) {
@@ -868,7 +1244,7 @@ class ConfirmModal extends Modal {
       this.close();
       this.onOk();
     });
-    row.createEl("button", { text: "Vazgeç" }).addEventListener("click", () => this.close());
+    row.createEl("button", { text: t("common.cancel") }).addEventListener("click", () => this.close());
     setTimeout(() => ok.focus(), 0);
   }
   onClose() {
@@ -895,7 +1271,7 @@ class EcuTerminalView extends ItemView {
     return VIEW;
   }
   getDisplayText() {
-    return this.isPanel ? "Terminal Paneli" : "Terminal";
+    return this.isPanel ? t("view.panel") : t("view.terminal");
   }
   getIcon() {
     return "terminal";
@@ -923,7 +1299,35 @@ class EcuTerminalView extends ItemView {
     if (state && !this.started) this.restore = state;
     await super.setState(state, result);
   }
+  showEngineCard() {
+    if (this.engineEl) return;
+    const card = (this.engineEl = this.gridEl.createDiv({ cls: "ecu-engine-card" }));
+    card.createDiv({ cls: "ecu-engine-title", text: t("engine.title") });
+    card.createDiv({
+      cls: "ecu-engine-text",
+      text: t("engine.text", { version: PTY_VERSION, platform: PLATFORM_KEY }),
+    });
+    const row = card.createDiv({ cls: "ecu-engine-row" });
+    const btn = row.createEl("button", { cls: "mod-cta", text: t("engine.download") });
+    const status = row.createSpan({ cls: "ecu-engine-status" });
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      status.setText(t("engine.downloading"));
+      try {
+        await this.plugin.installEngine();
+      } catch (e) {
+        btn.disabled = false;
+        status.setText(t("engine.downloadFailed", { error: e && e.message ? e.message : e }));
+      }
+    });
+  }
+
+  engineInstalled() {
+    if (!this.started) this.start();
+  }
+
   getState() {
+    if (!this.started && this.restore) return Object.assign({ panel: this.isPanel || undefined }, this.restore);
     return {
       panel: this.isPanel || undefined,
       sessions: this.sessions.map((s) => s.state()),
@@ -947,11 +1351,11 @@ class EcuTerminalView extends ItemView {
       b.addEventListener("click", (e) => fn(e, b));
       return b;
     };
-    tool("plus", `Yeni terminal (${KEY.split})`, () => this.addSession({ cwd: this.active && this.active.cwd }));
-    this.layoutBtn = tool("layout-grid", "Düzen", (e) => this.layoutMenu(e));
-    this.broadcastBtn = tool("radio-tower", "Tüm terminallere yaz (MultiExec)", () => this.setBroadcast(!this.broadcast), "ecu-broadcast-btn");
-    this.closeBtn = tool("x", "Terminalleri kapat", (e) => this.closeMenu(e));
-    this.hideBtn = tool("chevron-down", `Terminali gizle (${KEY.toggle})`, () => this.plugin.toggle());
+    tool("plus", t("toolbar.new", { key: KEY.split }), () => this.addSession({ cwd: this.active && this.active.cwd }));
+    this.layoutBtn = tool("layout-grid", t("toolbar.layout"), (e) => this.layoutMenu(e));
+    this.broadcastBtn = tool("radio-tower", t("common.broadcast"), () => this.setBroadcast(!this.broadcast), "ecu-broadcast-btn");
+    this.closeBtn = tool("x", t("toolbar.close"), (e) => this.closeMenu(e));
+    this.hideBtn = tool("chevron-down", t("toolbar.hide", { key: KEY.toggle }), () => this.plugin.toggle());
     this.gridEl = root.createDiv({ cls: "ecu-grid" });
     setTimeout(() => this.hideBtn && this.hideBtn.toggle(!this.isPanel), 0);
     this.ro = new ResizeObserver(() => {
@@ -969,7 +1373,12 @@ class EcuTerminalView extends ItemView {
 
   start() {
     if (this.started) return;
+    if (!this.plugin.engineReady()) return this.showEngineCard();
     this.started = true;
+    if (this.engineEl) {
+      this.engineEl.remove();
+      this.engineEl = null;
+    }
     const st = this.restore || {};
     this.restore = null;
     const list = Array.isArray(st.sessions) && st.sessions.length ? st.sessions : [{ cwd: st.cwd, buffer: st.buffer }];
@@ -982,6 +1391,10 @@ class EcuTerminalView extends ItemView {
   }
 
   addSession(opts, how) {
+    if (!this.plugin.engineReady()) {
+      this.showEngineCard();
+      return null;
+    }
     how = how || {};
     const s = new TermSession(this, opts || {});
     this.sessions.push(s);
@@ -1040,9 +1453,9 @@ class EcuTerminalView extends ItemView {
     const names = busy.map((s) => (s.localRun || s.remoteRun).cmd).filter(Boolean).slice(0, 3).join(", ");
     new ConfirmModal(
       this.app,
-      keep ? "Diğer terminaller kapatılsın mı?" : "Tüm terminaller kapatılsın mı?",
-      `${busy.length} terminalde hâlâ çalışan bir komut var${names ? ` (${names})` : ""}. Kapatırsan bu komutlar durdurulur.`,
-      "Yine de kapat",
+      keep ? t("confirm.closeOthersTitle") : t("confirm.closeAllTitle"),
+      t(busy.length === 1 ? "confirm.busyOne" : "confirm.busyMany", { n: busy.length, names: names ? ` (${names})` : "" }),
+      t("confirm.closeAnyway"),
       go
     ).open();
   }
@@ -1051,13 +1464,13 @@ class EcuTerminalView extends ItemView {
     const menu = new Menu();
     const n = this.sessions.length;
     menu.addItem((i) =>
-      i.setTitle("Bu terminali kapat").setIcon("x").onClick(() => this.active && this.removeSession(this.active))
+      i.setTitle(t("common.closeThis")).setIcon("x").onClick(() => this.active && this.removeSession(this.active))
     );
     menu.addItem((i) =>
-      i.setTitle("Diğer terminalleri kapat").setIcon("minus-square").setDisabled(n < 2).onClick(() => this.closeMany(this.active))
+      i.setTitle(t("common.closeOthers")).setIcon("minus-square").setDisabled(n < 2).onClick(() => this.closeMany(this.active))
     );
     menu.addItem((i) =>
-      i.setTitle(`Tüm terminalleri kapat (${n})`).setIcon("x-square").onClick(() => this.closeMany(null))
+      i.setTitle(t("common.closeAllN", { n })).setIcon("x-square").onClick(() => this.closeMany(null))
     );
     menu.showAtMouseEvent(evt);
   }
@@ -1067,7 +1480,8 @@ class EcuTerminalView extends ItemView {
     this.active = s;
     for (const x of this.sessions) x.el.toggleClass("is-active", x === s && this.sessions.length > 1);
     this.updateToolbar();
-    if (this.app.workspace.activeLeaf !== this.leaf) this.app.workspace.setActiveLeaf(this.leaf, { focus: false });
+    const av = this.app.workspace.getActiveViewOfType(ItemView);
+    if (!av || av.leaf !== this.leaf) this.app.workspace.setActiveLeaf(this.leaf, { focus: false });
   }
 
   focus() {
@@ -1095,7 +1509,7 @@ class EcuTerminalView extends ItemView {
     this.broadcast = on;
     this.contentEl.toggleClass("is-broadcast", on);
     this.broadcastBtn.toggleClass("is-active", on);
-    new Notice(on ? "MultiExec açık: yazdığın her şey bu paneldeki tüm terminallere gidiyor." : "MultiExec kapalı.");
+    new Notice(on ? t("notice.broadcastOn") : t("notice.broadcastOff"));
     if (this.active) this.active.focus();
   }
 
@@ -1119,7 +1533,7 @@ class EcuTerminalView extends ItemView {
     menu.addSeparator();
     menu.addItem((i) =>
       i
-        .setTitle("Boyutları eşitle")
+        .setTitle(t("layout.equalize"))
         .setIcon("equal")
         .onClick(() => {
           this.colSizes = this.rowSizes = null;
@@ -1158,24 +1572,24 @@ class EcuTerminalView extends ItemView {
     if (!this.rowSizes || this.rowSizes.length !== rows) this.rowSizes = Array(rows).fill(1);
     this.grid = { cols, rows };
     const GUT = "5px";
-    g.style.gridTemplateColumns = this.colSizes.map((f) => `minmax(0, ${f}fr)`).join(` ${GUT} `);
-    g.style.gridTemplateRows = this.rowSizes.map((f) => `minmax(0, ${f}fr)`).join(` ${GUT} `);
+    g.setCssProps({
+      "--ecu-grid-cols": this.colSizes.map((f) => `minmax(0, ${f}fr)`).join(` ${GUT} `),
+      "--ecu-grid-rows": this.rowSizes.map((f) => `minmax(0, ${f}fr)`).join(` ${GUT} `),
+    });
     g.toggleClass("is-single", this.sessions.length <= 1);
 
     g.querySelectorAll(":scope > .ecu-gutter, :scope > .ecu-add-tile").forEach((el) => el.remove());
     this.sessions.forEach((s, i) => {
       if (s.el.parentElement !== g) g.appendChild(s.el);
-      s.el.style.gridColumn = String((i % cols) * 2 + 1);
-      s.el.style.gridRow = String(Math.floor(i / cols) * 2 + 1);
+      s.el.setCssProps({ "--ecu-col": String((i % cols) * 2 + 1), "--ecu-row": String(Math.floor(i / cols) * 2 + 1) });
       s.el.toggleClass("is-active", s === this.active && this.sessions.length > 1);
     });
     for (let i = this.sessions.length; i < cols * rows; i++) {
       const tile = g.createDiv({ cls: "ecu-add-tile" });
-      tile.style.gridColumn = String((i % cols) * 2 + 1);
-      tile.style.gridRow = String(Math.floor(i / cols) * 2 + 1);
+      tile.setCssProps({ "--ecu-col": String((i % cols) * 2 + 1), "--ecu-row": String(Math.floor(i / cols) * 2 + 1) });
       const inner = tile.createDiv({ cls: "ecu-add-tile-inner" });
       setIcon(inner.createSpan(), "plus");
-      inner.createSpan({ text: "Yeni terminal" });
+      inner.createSpan({ text: t("tile.new") });
       tile.addEventListener("click", () => this.addSession({ cwd: this.active && this.active.cwd }, { keepSizes: true }));
     }
     for (let c = 0; c < cols - 1; c++) this.makeGutter("col", c, rows);
@@ -1187,13 +1601,8 @@ class EcuTerminalView extends ItemView {
   makeGutter(kind, idx, span) {
     const g = this.gridEl;
     const el = g.createDiv({ cls: `ecu-gutter ecu-gutter-${kind}` });
-    if (kind === "col") {
-      el.style.gridColumn = String(idx * 2 + 2);
-      el.style.gridRow = `1 / ${span * 2}`;
-    } else {
-      el.style.gridRow = String(idx * 2 + 2);
-      el.style.gridColumn = `1 / ${span * 2}`;
-    }
+    if (kind === "col") el.setCssProps({ "--ecu-col": String(idx * 2 + 2), "--ecu-row": `1 / ${span * 2}` });
+    else el.setCssProps({ "--ecu-row": String(idx * 2 + 2), "--ecu-col": `1 / ${span * 2}` });
     el.addEventListener("dblclick", () => {
       if (kind === "col") this.colSizes = null;
       else this.rowSizes = null;
@@ -1215,8 +1624,7 @@ class EcuTerminalView extends ItemView {
         sizes[idx] = a;
         sizes[idx + 1] = a0 + b0 - a;
         const tpl = sizes.map((f) => `minmax(0, ${f}fr)`).join(" 5px ");
-        if (kind === "col") g.style.gridTemplateColumns = tpl;
-        else g.style.gridTemplateRows = tpl;
+        g.setCssProps({ [kind === "col" ? "--ecu-grid-cols" : "--ecu-grid-rows"]: tpl });
       };
       const up = () => {
         document.removeEventListener("mousemove", move);
@@ -1234,7 +1642,7 @@ class EcuTerminalView extends ItemView {
     if (!this.captionEl) return;
     const n = this.sessions.length;
     const a = this.active;
-    this.captionEl.setText(n > 1 ? `Terminal  ·  ${n} oturum` : `Terminal  ${a ? a.captionText() : ""}`);
+    this.captionEl.setText(n > 1 ? t("toolbar.sessions", { n }) : `${t("view.terminal")}  ${a ? a.captionText() : ""}`);
     if (this.closeBtn) this.closeBtn.toggle(n > 1);
   }
 
@@ -1257,6 +1665,7 @@ class EcuTerminalView extends ItemView {
 module.exports = class EcuTerminal extends Plugin {
   async onload() {
     this.settings = Object.assign({}, DEFAULTS, await this.loadData());
+    setUiLang(this.settings.uiLang);
     this.lastTerm = null;
     this.termScope = new Scope();
     this.termScope.register(["Mod"], "j", () => (this.toggle(), false));
@@ -1264,42 +1673,34 @@ module.exports = class EcuTerminal extends Plugin {
     this.termScope.register(["Mod", "Shift"], "p", () => (this.app.commands.executeCommandById("command-palette:open"), false));
 
     this.registerView(VIEW, (leaf) => new EcuTerminalView(leaf, this));
-    try {
-      this.styleEl = document.head.createEl("style", { attr: { id: "ecu-terminal-xterm-css" } });
-      this.styleEl.textContent = fs.readFileSync(path.join(this.pluginDir(), "vendor/xterm/xterm.css"), "utf8");
-    } catch (e) {
-      console.warn("[ecu-terminal] xterm.css yüklenemedi", e);
-    }
 
     this.addCommand({
       id: "toggle",
-      name: "Show / hide terminal",
-      hotkeys: [{ modifiers: ["Mod"], key: "j" }],
+      name: t("cmd.toggle"),
       callback: () => this.toggle(),
     });
 
     this.addCommand({
       id: "split-right",
-      name: "New terminal beside",
+      name: t("cmd.splitRight"),
       callback: () => this.split("vertical"),
     });
 
     this.addCommand({
       id: "split-down",
-      name: "New terminal below",
+      name: t("cmd.splitDown"),
       callback: () => this.split("horizontal"),
     });
 
     this.addCommand({
       id: "restart",
-      name: "Restart terminal (new shell)",
+      name: t("cmd.restart"),
       callback: () => this.restart(),
     });
 
     this.addCommand({
       id: "move",
-      name: "Move terminal (right / bottom)",
-      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "j" }],
+      name: t("cmd.move"),
       callback: () => this.move(),
     });
 
@@ -1316,10 +1717,10 @@ module.exports = class EcuTerminal extends Plugin {
       this.app.workspace.on("file-menu", (menu, file) => {
         if (!file) return;
         const folder = file.children ? file : file.parent;
-        const name = folder && folder.path !== "/" ? folder.name : "kasa klasörü";
+        const name = folder && folder.path !== "/" ? folder.name : t("menu.vaultFolder");
         menu.addItem((i) =>
           i
-            .setTitle(`Terminali burada aç (${name})`)
+            .setTitle(t("menu.openHere", { name }))
             .setIcon("terminal")
             .setSection("open")
             .onClick(() => this.openAt(folder))
@@ -1331,7 +1732,7 @@ module.exports = class EcuTerminal extends Plugin {
         const file = info && info.file;
         menu.addItem((i) =>
           i
-            .setTitle("Terminali bu notun klasöründe aç")
+            .setTitle(t("menu.openInNoteFolder"))
             .setIcon("terminal")
             .setSection("ecu-terminal")
             .onClick(() => this.openAt(file ? file.parent : null))
@@ -1340,12 +1741,12 @@ module.exports = class EcuTerminal extends Plugin {
     );
     this.addCommand({
       id: "open-panel",
-      name: "Terminal Panelini aç (tam ekran sekme)",
+      name: t("cmd.openPanel"),
       callback: () => this.openPanel(),
     });
     this.addCommand({
       id: "open-here",
-      name: "Terminali açık notun klasöründe aç",
+      name: t("cmd.openHere"),
       callback: () => {
         const f = this.app.workspace.getActiveFile();
         this.openAt(f ? f.parent : null);
@@ -1354,7 +1755,7 @@ module.exports = class EcuTerminal extends Plugin {
 
     this.addCommand({
       id: "close-others",
-      name: "Diğer terminalleri kapat",
+      name: t("common.closeOthers"),
       callback: () => {
         const l = this.activeTermLeaf();
         if (l && l.view.active) l.view.closeMany(l.view.active);
@@ -1362,7 +1763,7 @@ module.exports = class EcuTerminal extends Plugin {
     });
     this.addCommand({
       id: "close-all",
-      name: "Tüm terminalleri kapat",
+      name: t("cmd.closeAll"),
       callback: () => {
         const l = this.activeTermLeaf();
         if (l) l.view.closeMany(null);
@@ -1371,12 +1772,12 @@ module.exports = class EcuTerminal extends Plugin {
 
     this.addCommand({
       id: "capture-last",
-      name: "Son komutu ve çıktısını nota ekle",
+      name: t("common.captureLast"),
       callback: () => this.capture(this.activeTermLeaf(), "last"),
     });
     this.addCommand({
       id: "capture-selection",
-      name: "Terminalde seçili metni nota ekle",
+      name: t("cmd.captureSelection"),
       callback: () => this.capture(this.activeTermLeaf(), "selection"),
     });
 
@@ -1432,6 +1833,29 @@ module.exports = class EcuTerminal extends Plugin {
     );
   }
 
+  recordCommand(cmd, host, cwd) {
+    cmd = String(cmd || "").replace(/\s+$/, "");
+    if (!cmd.trim() || /^\s/.test(cmd) || cmd.length > 400) return;
+    if (SECRET_RE.test(cmd) || TRIVIAL_RE.test(cmd.trim())) return;
+    host = host || "";
+    const list = (this.settings.history || []).filter((h) => !(h.cmd === cmd && (h.host || "") === host));
+    list.unshift({ cmd, host, cwd: cwd || "", t: Date.now() });
+    this.settings.history = list.slice(0, 40);
+    clearTimeout(this.histTimer);
+    this.histTimer = setTimeout(() => this.saveData(this.settings), 1500);
+    this.app.workspace.trigger("ecu-terminal:history");
+  }
+
+  recentCommands() {
+    return (this.settings.history || []).slice();
+  }
+
+  async clearHistory() {
+    this.settings.history = [];
+    await this.saveData(this.settings);
+    this.app.workspace.trigger("ecu-terminal:history");
+  }
+
   enterTermScope() {
     if (this.scopeOn) return;
     this.app.keymap.pushScope(this.termScope);
@@ -1447,7 +1871,6 @@ module.exports = class EcuTerminal extends Plugin {
   onunload() {
     this.leaveTermScope();
     document.querySelectorAll("." + HIDDEN).forEach((el) => el.classList.remove(HIDDEN));
-    if (this.styleEl) this.styleEl.remove();
     (this.navButtons || []).forEach((b) => b.remove());
   }
 
@@ -1455,7 +1878,7 @@ module.exports = class EcuTerminal extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType("file-explorer")) {
       const bar = leaf.view && leaf.view.containerEl.querySelector(".nav-header .nav-buttons-container");
       if (!bar || bar.querySelector(".ecu-term-navbtn")) continue;
-      const b = bar.createDiv({ cls: "clickable-icon nav-action-button ecu-term-navbtn", attr: { "aria-label": "Terminal (sağ tık: Terminal Paneli)" } });
+      const b = bar.createDiv({ cls: "clickable-icon nav-action-button ecu-term-navbtn", attr: { "aria-label": t("nav.button") } });
       setIcon(b, "terminal");
       b.addEventListener("click", (e) => this.navMenu(e));
       b.addEventListener("contextmenu", (e) => {
@@ -1471,7 +1894,7 @@ module.exports = class EcuTerminal extends Plugin {
     const v = this.leaf() && this.leaf().view;
     const open = !!v && !this.isHidden();
     const menu = new Menu();
-    menu.addItem((i) => i.setTitle("Terminal Paneli (tam ekran sekme)").setIcon("square-terminal").onClick(() => this.openPanel()));
+    menu.addItem((i) => i.setTitle(t("nav.panel")).setIcon("square-terminal").onClick(() => this.openPanel()));
     menu.addSeparator();
     const sessions = (v && v.sessions) || [];
     sessions.forEach((sess, i) => {
@@ -1484,11 +1907,11 @@ module.exports = class EcuTerminal extends Plugin {
         if (it.setChecked) it.setChecked(open && sess === v.active);
       });
     });
-    menu.addItem((i) => i.setTitle(`Yeni terminal  ${KEY.split}`).setIcon("plus").onClick(() => this.split()));
-    if (sessions.length > 1) menu.addItem((i) => i.setTitle(`Tüm terminalleri kapat (${sessions.length})`).setIcon("x-square").onClick(() => v.closeMany(null)));
+    menu.addItem((i) => i.setTitle(t("menu.newKey", { key: KEY.split })).setIcon("plus").onClick(() => this.split()));
+    if (sessions.length > 1) menu.addItem((i) => i.setTitle(t("common.closeAllN", { n: sessions.length })).setIcon("x-square").onClick(() => v.closeMany(null)));
     menu.addSeparator();
-    menu.addItem((i) => i.setTitle(open ? `Terminali gizle  ${KEY.toggle}` : `Terminali göster  ${KEY.toggle}`).setIcon(open ? "eye-off" : "terminal").onClick(() => this.toggle()));
-    menu.addItem((i) => i.setTitle("Kasa klasöründe yeni terminal").setIcon("folder-open").onClick(() => this.openAt(null)));
+    menu.addItem((i) => i.setTitle(open ? t("nav.hideKey", { key: KEY.toggle }) : t("nav.showKey", { key: KEY.toggle })).setIcon(open ? "eye-off" : "terminal").onClick(() => this.toggle()));
+    menu.addItem((i) => i.setTitle(t("nav.newInVault")).setIcon("folder-open").onClick(() => this.openAt(null)));
     if (v && v.sessions) {
       menu.addSeparator();
       for (const [k, label] of Object.entries(LAYOUTS)) {
@@ -1498,16 +1921,16 @@ module.exports = class EcuTerminal extends Plugin {
         });
       }
       menu.addItem((i) => {
-        i.setTitle("Tüm terminallere yaz (MultiExec)").setIcon("radio-tower").onClick(() => v.setBroadcast(!v.broadcast));
+        i.setTitle(t("common.broadcast")).setIcon("radio-tower").onClick(() => v.setBroadcast(!v.broadcast));
         if (i.setChecked) i.setChecked(!!v.broadcast);
       });
     }
     menu.addSeparator();
     const toBottom = this.settings.side !== "bottom";
-    menu.addItem((i) => i.setTitle(toBottom ? "Alta taşı" : "Sağa taşı").setIcon(toBottom ? "panel-bottom" : "panel-right").onClick(() => this.move()));
+    menu.addItem((i) => i.setTitle(toBottom ? t("common.moveBottom") : t("common.moveRight")).setIcon(toBottom ? "panel-bottom" : "panel-right").onClick(() => this.move()));
     menu.addItem((i) =>
       i
-        .setTitle("Terminal ayarları")
+        .setTitle(t("nav.settings"))
         .setIcon("settings")
         .onClick(() => {
           this.app.setting.open();
@@ -1536,8 +1959,8 @@ module.exports = class EcuTerminal extends Plugin {
     if (s.notifyMode !== "always" && seen) return;
     const ok = info.exit == null ? null : info.exit === 0;
     const where = info.host ? ` · ${info.host}` : "";
-    const title = (ok === false ? `✗ Komut hata verdi (kod ${info.exit})` : ok ? "✓ Komut bitti" : "Komut bitti") + where;
-    const body = `${info.cmd || "komut"}\n${fmtDuration(info.ms)}`;
+    const title = (ok === false ? t("notify.failed", { code: info.exit }) : ok ? t("notify.doneOk") : t("notify.done")) + where;
+    const body = `${info.cmd || t("notify.cmdFallback")}\n${fmtDuration(info.ms)}`;
     if (!appFocused) {
       try {
         const n = new Notification(title, { body, silent: !s.notifySound });
@@ -1548,7 +1971,7 @@ module.exports = class EcuTerminal extends Plugin {
     }
     const frag = createFragment((f) => {
       f.createDiv({ text: title, cls: "ecu-notice-title" });
-      f.createDiv({ text: `${info.cmd || "komut"} · ${fmtDuration(info.ms)}`, cls: "ecu-notice-body" });
+      f.createDiv({ text: `${info.cmd || t("notify.cmdFallback")} · ${fmtDuration(info.ms)}`, cls: "ecu-notice-body" });
     });
     const notice = new Notice(frag, 8000);
     if (notice.noticeEl) notice.noticeEl.addEventListener("click", () => this.bringToFront(sess));
@@ -1600,6 +2023,18 @@ module.exports = class EcuTerminal extends Plugin {
     return loadEngine(this.pluginDir());
   }
 
+  engineReady() {
+    return !!ptyDir(this.pluginDir());
+  }
+
+  async installEngine() {
+    if (!this.installing) {
+      this.installing = installEngine(this.pluginDir()).finally(() => (this.installing = null));
+    }
+    await this.installing;
+    for (const l of this.allLeaves()) if (l.view && l.view.engineInstalled) l.view.engineInstalled();
+  }
+
   applyToAll() {
     for (const l of this.allLeaves()) {
       for (const sess of (l.view && l.view.sessions) || []) {
@@ -1614,8 +2049,18 @@ module.exports = class EcuTerminal extends Plugin {
     }
   }
 
+  isPanelLeaf(l) {
+    if (l.view && l.view.isPanel) return true;
+    try {
+      const st = l.getViewState();
+      return !!(st && st.state && st.state.panel);
+    } catch (e) {
+      return false;
+    }
+  }
+
   leaves() {
-    return this.allLeaves().filter((l) => !(l.view && l.view.isPanel));
+    return this.allLeaves().filter((l) => !this.isPanelLeaf(l));
   }
 
   allLeaves() {
@@ -1623,21 +2068,35 @@ module.exports = class EcuTerminal extends Plugin {
   }
 
   activeTermLeaf() {
-    const a = this.app.workspace.activeLeaf;
-    if (a && a.view && a.view.getViewType() === VIEW) return a;
+    const v = this.app.workspace.getActiveViewOfType(EcuTerminalView);
+    if (v) return v.leaf;
     return this.leaf() || this.panelLeaf();
   }
 
   panelLeaf() {
-    return this.allLeaves().find((l) => l.view && l.view.isPanel) || null;
+    return this.allLeaves().find((l) => this.isPanelLeaf(l)) || null;
   }
 
   async openPanel() {
     let leaf = this.panelLeaf();
     if (!leaf) {
-      leaf = this.app.workspace.getLeaf("tab");
+      const ws = this.app.workspace;
+      let host = null;
+      ws.iterateRootLeaves((l) => {
+        if (!host && !this.leaves().includes(l)) host = l;
+      });
+      const dock = this.leaves().find((l) => this.termGroup(l));
+      if (host) {
+        ws.setActiveLeaf(host, { focus: false });
+        leaf = ws.getLeaf("tab");
+      } else if (dock) {
+        leaf = ws.createLeafBySplit(dock, this.settings.side === "bottom" ? "horizontal" : "vertical", true);
+      } else {
+        leaf = ws.getLeaf("tab");
+      }
       await leaf.setViewState({ type: VIEW, active: true, state: { panel: true } });
     }
+    for (let p = leaf.parent; p && p.containerEl; p = p.parent) p.containerEl.classList.remove(HIDDEN);
     if (leaf.setPinned && !leaf.getViewState().pinned) leaf.setPinned(true);
     this.app.workspace.revealLeaf(leaf);
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
@@ -1660,7 +2119,7 @@ module.exports = class EcuTerminal extends Plugin {
   termGroup(leaf) {
     const g = leaf.parent;
     if (!g || !g.containerEl || !g.children) return null;
-    return g.children.every((c) => c.view && c.view.getViewType() === VIEW) ? g : null;
+    return g.children.every((c) => c.view && c.view.getViewType() === VIEW && !this.isPanelLeaf(c)) ? g : null;
   }
 
   canHide() {
@@ -1811,7 +2270,7 @@ module.exports = class EcuTerminal extends Plugin {
         prev = leaf;
       }
     }
-    new Notice("Terminal: " + (this.settings.side === "bottom" ? "altta" : "sağda"));
+    new Notice(this.settings.side === "bottom" ? t("notice.movedBottom") : t("notice.movedRight"));
   }
 
   targetNote() {
@@ -1824,23 +2283,23 @@ module.exports = class EcuTerminal extends Plugin {
   capture(leaf, mode) {
     const s = this.session(leaf);
     const term = s && s.terminal;
-    if (!term) return new Notice("Açık terminal yok.");
+    if (!term) return new Notice(t("notice.noTerminal"));
     const note = this.targetNote();
-    if (!note) return new Notice("Önce çıktının ekleneceği notu aç.");
+    if (!note) return new Notice(t("notice.noNote"));
     const lines = bufferLines(term);
     let cap;
     if (mode === "selection") {
-      if (!term.hasSelection()) return new Notice("Terminalde önce bir şey seç.");
+      if (!term.hasSelection()) return new Notice(t("notice.noSelection"));
       cap = parseSelection(term.getSelection(), lines);
       term.clearSelection();
     } else {
       cap = leaf.view && leaf.view.lastCommandCapture ? leaf.view.lastCommandCapture() : lastCommand(lines);
-      if (!cap) return new Notice("Son komut bulunamadı. Çıktıyı seçip 'Seçimi nota ekle'yi kullan.");
+      if (!cap) return new Notice(t("notice.noLastCmd"));
     }
-    if (!cap.cmd && !cap.output) return new Notice("Eklenecek bir şey yok.");
+    if (!cap.cmd && !cap.output) return new Notice(t("notice.nothing"));
     const local = os && os.userInfo ? `${os.userInfo().username}@${os.hostname().replace(/\.local$/, "")}` : "";
     this.insertIntoNote(note, formatCapture(cap, { localHost: local }));
-    new Notice(`Nota eklendi: ${note.view.file ? note.view.file.basename : ""}`);
+    new Notice(t("notice.added", { name: note.view.file ? note.view.file.basename : "" }));
   }
 
   insertIntoNote(note, block) {
@@ -1885,63 +2344,63 @@ module.exports = class EcuTerminal extends Plugin {
     const term = s && s.terminal;
     const menu = new Menu();
     menu.addItem((i) =>
-      i.setTitle("Kopyala").setIcon("copy").setDisabled(!term || !term.hasSelection()).onClick(() => {
+      i.setTitle(t("menu.copy")).setIcon("copy").setDisabled(!term || !term.hasSelection()).onClick(() => {
         navigator.clipboard.writeText(term.getSelection());
         term.clearSelection();
       })
     );
     menu.addItem((i) =>
-      i.setTitle("Yapıştır").setIcon("clipboard-paste").setDisabled(!term).onClick(async () => {
+      i.setTitle(t("menu.paste")).setIcon("clipboard-paste").setDisabled(!term).onClick(async () => {
         term.paste(await navigator.clipboard.readText());
         term.focus();
       })
     );
     menu.addItem((i) =>
-      i.setTitle("Tümünü seç").setIcon("text-select").setDisabled(!term).onClick(() => term.selectAll())
+      i.setTitle(t("menu.selectAll")).setIcon("text-select").setDisabled(!term).onClick(() => term.selectAll())
     );
     menu.addSeparator();
     const note = this.targetNote();
-    const where = note ? ` (${note.view.file ? note.view.file.basename : "not"})` : "";
+    const where = note ? ` (${note.view.file ? note.view.file.basename : t("menu.noteFallback")})` : "";
     menu.addItem((i) =>
       i
-        .setTitle("Son komutu ve çıktısını nota ekle" + where)
+        .setTitle(t("common.captureLast") + where)
         .setIcon("file-input")
         .setDisabled(!term || !note)
         .onClick(() => this.capture(leaf, "last"))
     );
     menu.addItem((i) =>
       i
-        .setTitle("Seçimi nota ekle" + where)
+        .setTitle(t("menu.captureSelection") + where)
         .setIcon("file-plus")
         .setDisabled(!term || !note || !term.hasSelection())
         .onClick(() => this.capture(leaf, "selection"))
     );
     menu.addItem((i) =>
-      i.setTitle("Ekranı temizle").setIcon("eraser").setDisabled(!s).onClick(() => {
+      i.setTitle(t("menu.clear")).setIcon("eraser").setDisabled(!s).onClick(() => {
         s.pty.write("\f");
         term.focus();
       })
     );
     menu.addSeparator();
     const v = leaf.view;
-    menu.addItem((i) => i.setTitle(`Yeni terminal  ${KEY.split}`).setIcon("plus").onClick(() => this.split(null, leaf)));
-    menu.addItem((i) => i.setTitle("Düzen…").setIcon("layout-grid").onClick(() => v.layoutMenu(evt)));
+    menu.addItem((i) => i.setTitle(t("menu.newKey", { key: KEY.split })).setIcon("plus").onClick(() => this.split(null, leaf)));
+    menu.addItem((i) => i.setTitle(t("menu.layout")).setIcon("layout-grid").onClick(() => v.layoutMenu(evt)));
     menu.addItem((i) => {
-      i.setTitle("Tüm terminallere yaz (MultiExec)").setIcon("radio-tower").onClick(() => v.setBroadcast(!v.broadcast));
+      i.setTitle(t("common.broadcast")).setIcon("radio-tower").onClick(() => v.setBroadcast(!v.broadcast));
       if (i.setChecked) i.setChecked(!!v.broadcast);
     });
     menu.addSeparator();
     const toBottom = this.settings.side !== "bottom";
     menu.addItem((i) =>
-      i.setTitle(toBottom ? "Alta taşı" : "Sağa taşı").setIcon(toBottom ? "panel-bottom" : "panel-right").onClick(() => this.move())
+      i.setTitle(toBottom ? t("common.moveBottom") : t("common.moveRight")).setIcon(toBottom ? "panel-bottom" : "panel-right").onClick(() => this.move())
     );
     menu.addItem((i) =>
-      i.setTitle("Terminali gizle").setIcon("eye-off").onClick(() => {
+      i.setTitle(t("menu.hide")).setIcon("eye-off").onClick(() => {
         if (!this.isHidden()) this.toggle();
       })
     );
     menu.addItem((i) =>
-      i.setTitle("Bu terminali kapat").setIcon("x").onClick(() => {
+      i.setTitle(t("common.closeThis")).setIcon("x").onClick(() => {
         if (v.active) v.removeSession(v.active);
         if (v.sessions.length) {
           this.app.workspace.setActiveLeaf(leaf, { focus: true });
@@ -1950,10 +2409,10 @@ module.exports = class EcuTerminal extends Plugin {
       })
     );
     menu.addItem((i) =>
-      i.setTitle("Diğer terminalleri kapat").setIcon("minus-square").setDisabled(v.sessions.length < 2).onClick(() => v.closeMany(v.active))
+      i.setTitle(t("common.closeOthers")).setIcon("minus-square").setDisabled(v.sessions.length < 2).onClick(() => v.closeMany(v.active))
     );
     menu.addItem((i) =>
-      i.setTitle(`Tüm terminalleri kapat (${v.sessions.length})`).setIcon("x-square").setDisabled(v.sessions.length < 2 && !v.isPanel).onClick(() => v.closeMany(null))
+      i.setTitle(t("common.closeAllN", { n: v.sessions.length })).setIcon("x-square").setDisabled(v.sessions.length < 2 && !v.isPanel).onClick(() => v.closeMany(null))
     );
     menu.showAtMouseEvent(evt);
   }
@@ -1970,12 +2429,30 @@ class EcuTerminalSettings extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
-      .setName("Terminal konumu")
-      .setDesc("Yeni açılan terminal notun neresinde dursun.")
+      .setName(t("common.language"))
+      .setDesc(t("set.uiLangDesc"))
       .addDropdown((d) =>
         d
-          .addOption("right", "Sağda")
-          .addOption("bottom", "Altta")
+          .addOption("auto", t("set.uiLangAuto"))
+          .addOption("en", t("set.uiLangEn"))
+          .addOption("tr", t("set.uiLangTr"))
+          .setValue(this.plugin.settings.uiLang || "auto")
+          .onChange(async (v) => {
+            this.plugin.settings.uiLang = v;
+            setUiLang(v);
+            await this.plugin.saveData(this.plugin.settings);
+            new Notice(t("notice.langChanged"));
+            this.display();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t("set.side"))
+      .setDesc(t("set.sideDesc"))
+      .addDropdown((d) =>
+        d
+          .addOption("right", t("set.sideRight"))
+          .addOption("bottom", t("set.sideBottom"))
           .setValue(this.plugin.settings.side)
           .onChange(async (v) => {
             this.plugin.settings.side = v;
@@ -1984,8 +2461,8 @@ class EcuTerminalSettings extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Terminal boyutu (%)")
-      .setDesc("Yeni açılan terminalin kapladığı alan.")
+      .setName(t("set.size"))
+      .setDesc(t("set.sizeDesc"))
       .addSlider((s) =>
         s
           .setLimits(15, 80, 5)
@@ -1998,12 +2475,12 @@ class EcuTerminalSettings extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Terminal çıktısı nota nereye eklensin")
-      .setDesc("Sağ tık → 'Son komutu ve çıktısını nota ekle' / 'Seçimi nota ekle'. Çıktı en son kullandığın nota, saatiyle birlikte eklenir.")
+      .setName(t("set.notePlace"))
+      .setDesc(t("set.notePlaceDesc"))
       .addDropdown((d) =>
         d
-          .addOption("cursor", "İmlecin olduğu yere")
-          .addOption("end", "Notun sonuna")
+          .addOption("cursor", t("set.placeCursor"))
+          .addOption("end", t("set.placeEnd"))
           .setValue(this.plugin.settings.notePlace)
           .onChange(async (v) => {
             this.plugin.settings.notePlace = v;
@@ -2013,20 +2490,20 @@ class EcuTerminalSettings extends PluginSettingTab {
 
     const p = this.plugin;
     const save = () => p.saveData(p.settings);
-    const note = "Yeni açılan terminallerde geçerli olur.";
+    const note = t("set.newOnly");
 
-    containerEl.createEl("h3", { text: "Shell" });
+    new Setting(containerEl).setName(t("set.shell")).setHeading();
     new Setting(containerEl)
-      .setName("Shell")
-      .setDesc(`Boş bırakırsan sistemdeki varsayılan kullanılır (${defaultShell()}). zsh, bash ve PowerShell'de komut sınırları kesin bilinir.`)
+      .setName(t("set.shell"))
+      .setDesc(t("set.shellDesc", { shell: defaultShell() }))
       .addText((t) => t.setPlaceholder(defaultShell()).setValue(p.settings.shellPath).onChange(async (v) => ((p.settings.shellPath = v.trim()), await save())));
     new Setting(containerEl)
-      .setName("Başlangıç klasörü")
+      .setName(t("set.startDir"))
       .addDropdown((d) =>
         d
-          .addOption("vault", "Kasa klasörü (notlar)")
-          .addOption("home", "Ev klasörü (~)")
-          .addOption("custom", "Özel klasör")
+          .addOption("vault", t("set.startVault"))
+          .addOption("home", t("set.startHome"))
+          .addOption("custom", t("set.startCustom"))
           .setValue(p.settings.startDir)
           .onChange(async (v) => {
             p.settings.startDir = v;
@@ -2036,64 +2513,64 @@ class EcuTerminalSettings extends PluginSettingTab {
       );
     if (p.settings.startDir === "custom")
       new Setting(containerEl)
-        .setName("Özel klasör")
+        .setName(t("set.startCustom"))
         .addText((t) => t.setPlaceholder("/Users/…").setValue(p.settings.customDir).onChange(async (v) => ((p.settings.customDir = v.trim()), await save())));
     new Setting(containerEl)
-      .setName("Oturumu hatırla")
-      .setDesc("Obsidian yeniden açılınca terminal aynı klasörde başlar ve önceki ekran içeriği görünür (shell yeniden başlar).")
+      .setName(t("set.persist"))
+      .setDesc(t("set.persistDesc"))
       .addToggle((t) => t.setValue(p.settings.persistBuffer).onChange(async (v) => ((p.settings.persistBuffer = v), await save())));
 
-    containerEl.createEl("h3", { text: "Komut bitince bildirim" });
+    new Setting(containerEl).setName(t("set.hNotify")).setHeading();
     new Setting(containerEl)
-      .setName("Bildirim gönder")
-      .setDesc("Uzun süren bir komut bitince haber verir: çıkış kodu (✓/✗), süre ve ssh'teysen sunucu adıyla. ssh içindeki komutların bitişi prompt'un geri gelmesinden anlaşılır.")
+      .setName(t("set.notify"))
+      .setDesc(t("set.notifyDesc"))
       .addToggle((t) => t.setValue(p.settings.notify).onChange(async (v) => ((p.settings.notify = v), await save())));
     new Setting(containerEl)
-      .setName("En az süre (saniye)")
-      .setDesc("Bundan kısa süren komutlar için bildirim gelmez.")
+      .setName(t("set.notifyAfter"))
+      .setDesc(t("set.notifyAfterDesc"))
       .addSlider((sl) => sl.setLimits(3, 120, 1).setValue(Number(p.settings.notifyAfter) || 10).setDynamicTooltip().onChange(async (v) => ((p.settings.notifyAfter = v), await save())));
     new Setting(containerEl)
-      .setName("Ne zaman")
+      .setName(t("set.notifyMode"))
       .addDropdown((d) =>
         d
-          .addOption("away", "Obsidian arka plandayken ya da terminal görünmüyorken")
-          .addOption("always", "Her zaman")
+          .addOption("away", t("set.notifyAway"))
+          .addOption("always", t("set.notifyAlways"))
           .setValue(p.settings.notifyMode)
           .onChange(async (v) => ((p.settings.notifyMode = v), await save()))
       );
     new Setting(containerEl)
-      .setName("Ses")
+      .setName(t("set.sound"))
       .addToggle((t) => t.setValue(p.settings.notifySound).onChange(async (v) => ((p.settings.notifySound = v), await save())));
 
-    containerEl.createEl("h3", { text: "Görünüm ve davranış" });
+    new Setting(containerEl).setName(t("set.hLook")).setHeading();
     new Setting(containerEl)
-      .setName("Yazı tipi")
+      .setName(t("set.font"))
       .setDesc(note)
       .addText((t) => t.setValue(p.settings.fontFamily).onChange(async (v) => ((p.settings.fontFamily = v), await save())));
     new Setting(containerEl)
-      .setName("Yazı boyutu")
+      .setName(t("set.fontSize"))
       .addSlider((s) => s.setLimits(10, 22, 1).setValue(p.settings.fontSize).setDynamicTooltip().onChange(async (v) => ((p.settings.fontSize = v), await save(), p.applyToAll())));
     new Setting(containerEl)
-      .setName("İmleç")
+      .setName(t("set.cursor"))
       .addDropdown((d) =>
         d
-          .addOption("block", "Blok")
-          .addOption("bar", "Çizgi")
-          .addOption("underline", "Alt çizgi")
+          .addOption("block", t("set.cursorBlock"))
+          .addOption("bar", t("set.cursorBar"))
+          .addOption("underline", t("set.cursorUnderline"))
           .setValue(p.settings.cursorStyle)
           .onChange(async (v) => ((p.settings.cursorStyle = v), await save(), p.applyToAll()))
       )
-      .addToggle((t) => t.setTooltip("Yanıp sönsün").setValue(p.settings.cursorBlink).onChange(async (v) => ((p.settings.cursorBlink = v), await save(), p.applyToAll())));
+      .addToggle((tg) => tg.setTooltip(t("set.cursorBlink")).setValue(p.settings.cursorBlink).onChange(async (v) => ((p.settings.cursorBlink = v), await save(), p.applyToAll())));
     new Setting(containerEl)
-      .setName("Seçince kopyala")
-      .setDesc("Fareyle seçtiğin metin otomatik panoya kopyalanır.")
+      .setName(t("set.copyOnSelect"))
+      .setDesc(t("set.copyOnSelectDesc"))
       .addToggle((t) => t.setValue(p.settings.copyOnSelect).onChange(async (v) => ((p.settings.copyOnSelect = v), await save())));
     if (IS_MAC) new Setting(containerEl)
-      .setName("Option tuşu Meta gibi davransın")
-      .setDesc("Kapalıyken Option ile Türkçe/özel karakter yazılır ve ⌥←/→ kelime atlar. Açıkken Option, emacs tarzı Meta tuşu olur.")
+      .setName(t("set.optionMeta"))
+      .setDesc(t("set.optionMetaDesc"))
       .addToggle((t) => t.setValue(p.settings.optionIsMeta).onChange(async (v) => ((p.settings.optionIsMeta = v), await save(), p.applyToAll())));
     new Setting(containerEl)
-      .setName("Geçmiş satır sayısı")
+      .setName(t("set.scrollback"))
       .setDesc(note)
       .addText((t) =>
         t.setValue(String(p.settings.scrollback)).onChange(async (v) => {
@@ -2108,8 +2585,8 @@ class EcuTerminalSettings extends PluginSettingTab {
     containerEl.createEl("p", {
       text:
         IS_MAC
-          ? "Cmd+J göster/gizle, Cmd+Shift+J sağ/alt arasında taşı. Cmd+D yeni terminal (ızgaraya eklenir), ⌥⌘+ok terminaller arası geçiş, Ctrl-D o terminali kapatır. Ayraçları sürükleyerek boyutlandır, çift tıkla eşitle. ⌘F ara, ⌘K ekranı temizle, ⌘+tık bağlantıyı açar. ⌥←/→ kelime, ⌘←/→ satır başı/sonu, ⌘⌫ satırı siler. Sağ tıkla menü."
-          : `Ctrl+J göster/gizle, Ctrl+Shift+J sağ/alt arasında taşı. Ctrl+Shift+D yeni terminal (ızgaraya eklenir), Alt+ok terminaller arası geçiş. Ctrl+Shift+C kopyala, ${KEY.paste} yapıştır, Ctrl+Shift+F ara, Ctrl+Shift+K ekranı temizle, Ctrl+Shift+P komut paleti. Terminal odaktayken diğer Ctrl tuşları kabuğa gider. Ctrl+tık bağlantıyı açar. Sağ tıkla menü.`,
+          ? t("set.helpMac")
+          : t("set.helpOther", { paste: KEY.paste }),
       cls: "setting-item-description",
     });
   }

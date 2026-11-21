@@ -1,4 +1,8 @@
+node_modules/
+dist/
+/main.js
+/styles.css
 data.json
 shell/
+node-pty/
 .DS_Store
-node_modules/

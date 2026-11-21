@@ -10,7 +10,7 @@
   display: none;
 }
 
-.workspace-tabs:has(> .workspace-tab-container > .workspace-leaf > .workspace-leaf-content[data-type="ecu-terminal-view"]):not(:has(.workspace-leaf-content:not([data-type="ecu-terminal-view"])))
+.workspace-tabs:has(> .workspace-tab-container > .workspace-leaf > .workspace-leaf-content[data-type="ecu-terminal-view"]):not(:has(.workspace-leaf-content:not([data-type="ecu-terminal-view"]))):not(:has(.ecu-term.is-panel))
   > .workspace-tab-header-container {
   display: none !important;
 }
@@ -263,4 +263,46 @@ body.ecu-resizing.is-row * {
 
 .workspace-leaf-content[data-type="ecu-terminal-view"] > .view-content.ecu-term.is-panel {
   padding: 10px 16px 0 16px;
+}
+
+.ecu-grid {
+  grid-template-columns: var(--ecu-grid-cols, minmax(0, 1fr));
+  grid-template-rows: var(--ecu-grid-rows, minmax(0, 1fr));
+}
+.ecu-grid > .ecu-pane,
+.ecu-grid > .ecu-add-tile,
+.ecu-grid > .ecu-gutter {
+  grid-column: var(--ecu-col, auto);
+  grid-row: var(--ecu-row, auto);
+}
+
+.ecu-engine-card {
+  align-self: center;
+  justify-self: center;
+  max-width: 520px;
+  margin: 32px auto;
+  padding: 18px 20px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  font-family: var(--font-interface);
+}
+.ecu-engine-title {
+  font-weight: var(--font-semibold);
+  margin-bottom: 6px;
+}
+.ecu-engine-text {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+}
+.ecu-engine-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.ecu-engine-status {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
 }

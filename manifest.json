@@ -1,7 +1,7 @@
 {
   "id": "ecu-terminal",
   "name": "ecu-terminal",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "minAppVersion": "1.7.2",
   "description": "A terminal inside Obsidian, with split panes and command output to notes.",
   "author": "Eren Can Ucar",
