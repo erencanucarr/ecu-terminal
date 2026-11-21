@@ -118,7 +118,7 @@ for (const line of ["hello world", "total 48", "drwxr-xr-x  5 me staff 160 .", "
   check(`not a prompt: ${line}`, () => assert.equal(splitPrompt(line), null));
 }
 
-check("shQuote plain", () => assert.equal(shQuote("/Users/me/vault/.obsidian/plugins/ecu-terminal/shell/ecu-init.zsh"), "'/Users/me/vault/.obsidian/plugins/ecu-terminal/shell/ecu-init.zsh'"));
+check("shQuote plain", () => assert.equal(shQuote("/home/me/vault/.obsidian/plugins/ecu-terminal/shell/ecu-init.zsh"), "'/home/me/vault/.obsidian/plugins/ecu-terminal/shell/ecu-init.zsh'"));
 check("shQuote special", () => assert.equal(shQuote(`/a "b" $HOME \`x\` it's`), `'/a "b" $HOME \`x\` it'\\''s'`));
 check("shQuote round-trip in sh", () => {
   const { execFileSync } = require("node:child_process");
