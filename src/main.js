@@ -780,6 +780,10 @@ class TermSession {
     this.view = view;
     this.plugin = view.plugin;
     this.restore = opts || {};
+    this.command = (opts && opts.command) || "";
+    this.resumeCommand = (opts && opts.resumeCommand) || "";
+    this.commandSentAt = 0;
+    this.lastDataAt = 0;
     this.cwd = "";
     this.shellName = "";
     this.term = null;
@@ -933,6 +937,24 @@ class TermSession {
     this.spawnedAt = Date.now();
     this.ptySubs = [this.pipe(p, term), p.onExit((ev) => this.ptyExited(p, ev, shell))];
     this.updateCaption();
+    if (this.command && !this.commandSentAt) this.runWhenReady(p, this.command);
+  }
+
+  runWhenReady(p, cmd) {
+    const started = Date.now();
+    const tick = () => {
+      if (this.closed || this.ptyProc !== p) return;
+      const now = Date.now();
+      const quiet = this.lastDataAt && now - this.lastDataAt > 250;
+      if ((this.integrated && quiet) || (quiet && now - started > 600) || now - started > 5000) {
+        this.commandSentAt = Date.now();
+        this.touched = true;
+        p.write(cmd + "\r");
+        return;
+      }
+      this.hostEl.win.setTimeout(tick, 100);
+    };
+    this.hostEl.win.setTimeout(tick, 150);
   }
 
   ptyExited(p, ev, shell) {
@@ -993,6 +1015,7 @@ class TermSession {
 
   pipe(p, term) {
     return pipeData(p, term, () => {
+      this.lastDataAt = Date.now();
       if (this.remoteRun) this.checkRemoteDone();
     });
   }
@@ -1025,7 +1048,7 @@ class TermSession {
     const p = splitPrompt(line ? line.translateToString(true) : "");
     if (p && p.cmd) {
       this.remoteRun = { cmd: p.cmd, prompt: p.prompt, t: Date.now() };
-      this.plugin.recordCommand(p.cmd, hostOf(p.prompt), "");
+      if (!this.command) this.plugin.recordCommand(p.cmd, hostOf(p.prompt), "");
     }
   }
 
@@ -1058,7 +1081,7 @@ class TermSession {
           if (p && hostOf(p.prompt)) this.plugin.localHost = hostOf(p.prompt);
         }
         this.localRun = { cmd: this.pendingCmd, t: Date.now() };
-        this.plugin.recordCommand(this.pendingCmd, "", this.cwd);
+        if (!this.command) this.plugin.recordCommand(this.pendingCmd, "", this.cwd);
         this.remoteRun = null;
         this.pendingCmd = "";
         if (this.commands.length > 30) {
@@ -1345,6 +1368,11 @@ class TermSession {
 
   state() {
     const st = { cwd: this.cwd || this.restore.cwd || "" };
+    if (this.command) {
+      st.command = this.resumeCommand || this.command;
+      if (this.resumeCommand) st.resumeCommand = this.resumeCommand;
+      return st;
+    }
     if (this.plugin.settings.persistBuffer && !this.term && this.restore.buffer) {
       st.buffer = this.restore.buffer;
     } else if (this.plugin.settings.persistBuffer && !this.touched && this.savedBuffer) {
@@ -1427,15 +1455,17 @@ class EcuTerminalView extends ItemView {
     this.restore = null;
     this.started = false;
     this.isPanel = false;
+    this.tool = null;
   }
   getViewType() {
     return VIEW;
   }
   getDisplayText() {
+    if (this.tool) return this.tool.title || t("view.terminal");
     return this.isPanel ? t("view.panel") : t("view.terminal");
   }
   getIcon() {
-    return "terminal";
+    return (this.tool && this.tool.icon) || "terminal";
   }
 
   get session() {
@@ -1449,6 +1479,14 @@ class EcuTerminalView extends ItemView {
   }
 
   async setState(state, result) {
+    if (state && state.tool && state.tool.id) {
+      this.tool = { id: String(state.tool.id), title: state.tool.title || "", icon: state.tool.icon || "" };
+      this.contentEl.addClass("is-tool");
+      try {
+        this.leaf.updateHeader();
+      } catch (e) {
+      }
+    }
     if (state && state.panel) {
       this.isPanel = true;
       this.contentEl.addClass("is-panel");
@@ -1490,9 +1528,10 @@ class EcuTerminalView extends ItemView {
   }
 
   getState() {
-    if (!this.started && this.restore) return Object.assign({ panel: this.isPanel || undefined }, this.restore);
+    if (!this.started && this.restore) return Object.assign({ panel: this.isPanel || undefined, tool: this.tool || undefined }, this.restore);
     return {
       panel: this.isPanel || undefined,
+      tool: this.tool || undefined,
       sessions: this.sessions.map((s) => s.state()),
       layout: this.layout,
       colSizes: this.colSizes,
@@ -1520,7 +1559,7 @@ class EcuTerminalView extends ItemView {
     this.closeBtn = tool("x", t("toolbar.close"), (e) => this.closeMenu(e));
     this.hideBtn = tool("chevron-down", t("toolbar.hide"), () => this.plugin.toggle());
     this.gridEl = root.createDiv({ cls: "ecu-grid" });
-    setTimeout(() => this.hideBtn && this.hideBtn.toggle(!this.isPanel), 0);
+    setTimeout(() => this.hideBtn && this.hideBtn.toggle(!this.isPanel && !this.tool), 0);
     this.ro = new this.gridEl.win.ResizeObserver(() => {
       const shape = this.bestShape();
       if (this.layout === "auto" && (shape.cols !== this.grid.cols || shape.rows !== this.grid.rows)) this.relayout();
@@ -1828,6 +1867,12 @@ class EcuTerminalView extends ItemView {
 
 module.exports = class EcuTerminal extends Plugin {
   async onload() {
+    this.api = {
+      version: 1,
+      openTool: (o) => this.openTool(o),
+      toolLeaf: (id) => this.toolLeaf(id),
+      sendToTool: (id, text, o) => this.sendToTool(id, text, o),
+    };
     this.settings = Object.assign({}, DEFAULTS, await this.loadData());
     setUiLang(this.settings.uiLang);
     const stored = this.settings.history;
@@ -2142,6 +2187,7 @@ module.exports = class EcuTerminal extends Plugin {
   }
 
   notifyDone(sess, info) {
+    if (sess && sess.command) return;
     const s = this.settings;
     if (!s.notify || !info || info.ms < (Number(s.notifyAfter) || 10) * 1000) return;
     const appFocused = this.appFocused(sess);
@@ -2257,7 +2303,74 @@ module.exports = class EcuTerminal extends Plugin {
   }
 
   leaves() {
-    return this.allLeaves().filter((l) => !this.isPanelLeaf(l));
+    return this.allLeaves().filter((l) => !this.isPanelLeaf(l) && !this.toolId(l));
+  }
+
+  toolId(l) {
+    if (l.view && l.view.tool) return l.view.tool.id;
+    try {
+      const st = l.getViewState();
+      return (st && st.state && st.state.tool && st.state.tool.id) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  toolLeaf(id) {
+    return this.allLeaves().find((l) => this.toolId(l) === id) || null;
+  }
+
+  async openTool(o) {
+    const ws = this.app.workspace;
+    let leaf = this.toolLeaf(o.id);
+    if (leaf) {
+      if (leaf.loadIfDeferred) await leaf.loadIfDeferred();
+      ws.revealLeaf(leaf);
+      this.focusTerminal(leaf);
+      return { leaf, created: false };
+    }
+    const base = this.noteLeaf();
+    if (o.place === "tab") leaf = ws.getLeaf("tab");
+    else {
+      const dir = o.place === "bottom" ? "horizontal" : "vertical";
+      leaf = base ? ws.createLeafBySplit(base, dir) : ws.getLeaf("split", dir);
+    }
+    const session = { cwd: o.cwd || "", command: o.command || "", resumeCommand: o.resumeCommand || "" };
+    await leaf.setViewState({ type: VIEW, active: true, state: { tool: { id: o.id, title: o.title || "", icon: o.icon || "" }, sessions: [session] } });
+    ws.revealLeaf(leaf);
+    this.focusTerminal(leaf);
+    return { leaf, created: true };
+  }
+
+  async sendToTool(id, text, opts) {
+    opts = opts || {};
+    const leaf = this.toolLeaf(id);
+    if (!leaf) return false;
+    if (leaf.loadIfDeferred) await leaf.loadIfDeferred();
+    const win = leaf.view.containerEl.win || window;
+    const sleep = (ms) => new Promise((r) => win.setTimeout(r, ms));
+    let s = null;
+    for (let i = 0; i < 100; i++) {
+      s = leaf.view.active;
+      if (s && s.ptyProc && (!s.command || s.commandSentAt)) break;
+      await sleep(100);
+    }
+    if (!s || !s.ptyProc) return false;
+    if (s.command && s.commandSentAt) {
+      for (let i = 0; i < 80; i++) {
+        const now = Date.now();
+        if (now - s.commandSentAt > 1500 && s.lastDataAt && now - s.lastDataAt > 700) break;
+        await sleep(100);
+      }
+    }
+    const paste = s.term && s.term.modes && s.term.modes.bracketedPasteMode;
+    s.ptyProc.write(paste ? "\x1b[200~" + text + "\x1b[201~" : text);
+    if (opts.enter) s.ptyProc.write("\r");
+    if (opts.focus !== false) {
+      this.app.workspace.revealLeaf(leaf);
+      this.focusTerminal(leaf);
+    }
+    return true;
   }
 
   allLeaves() {
@@ -2364,7 +2477,7 @@ module.exports = class EcuTerminal extends Plugin {
   termGroup(leaf) {
     const g = leaf.parent;
     if (!g || !g.containerEl || !g.children) return null;
-    return g.children.every((c) => c.view && c.view.getViewType() === VIEW && !this.isPanelLeaf(c)) ? g : null;
+    return g.children.every((c) => c.view && c.view.getViewType() === VIEW && !this.isPanelLeaf(c) && !this.toolId(c)) ? g : null;
   }
 
   canHide() {
