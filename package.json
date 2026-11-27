@@ -1,6 +1,6 @@
 {
   "name": "ecu-terminal",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "description": "A built-in terminal with split panes, command notifications and command output to notes.",
   "license": "MIT",

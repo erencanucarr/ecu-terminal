@@ -1,7 +1,7 @@
 {
   "id": "ecu-terminal",
   "name": "ecu-terminal",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "minAppVersion": "1.7.2",
   "description": "A built-in terminal with split panes, command notifications and command output to notes.",
   "author": "Eren Can Ucar",
