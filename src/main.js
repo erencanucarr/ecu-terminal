@@ -1872,6 +1872,7 @@ module.exports = class EcuTerminal extends Plugin {
       openTool: (o) => this.openTool(o),
       toolLeaf: (id) => this.toolLeaf(id),
       sendToTool: (id, text, o) => this.sendToTool(id, text, o),
+      toolText: (id, lines) => this.toolText(id, lines),
     };
     this.settings = Object.assign({}, DEFAULTS, await this.loadData());
     setUiLang(this.settings.uiLang);
@@ -2340,6 +2341,20 @@ module.exports = class EcuTerminal extends Plugin {
     ws.revealLeaf(leaf);
     this.focusTerminal(leaf);
     return { leaf, created: true };
+  }
+
+  toolText(id, lines) {
+    const leaf = this.toolLeaf(id);
+    const s = leaf && leaf.view && leaf.view.active;
+    if (!s || !s.term) return null;
+    const b = s.term.buffer.active;
+    const out = [];
+    const end = b.baseY + b.cursorY + 1;
+    for (let i = Math.max(0, end - (lines || 30)); i < Math.max(end, b.length); i++) {
+      const l = b.getLine(i);
+      if (l) out.push(l.translateToString(true));
+    }
+    return { text: out.join("\n"), idleMs: s.lastDataAt ? Date.now() - s.lastDataAt : 0, running: !!s.ptyProc, commandSentMs: s.commandSentAt ? Date.now() - s.commandSentAt : -1 };
   }
 
   async sendToTool(id, text, opts) {
